@@ -43,6 +43,21 @@ export const screenshotEl = async (el, filename) => {
   return url;
 };
 
+// Share receipt image + text via Web Share API (mobile WhatsApp), fallback to wa.me text link
+export const shareReceipt = async (el, text, filename, phone) => {
+  try {
+    if (el && navigator.canShare) {
+      const canvas = await html2canvas(el, { backgroundColor: "#111111", scale: 2, useCORS: true });
+      const blob = await new Promise((r) => canvas.toBlob(r, "image/png"));
+      const file = new File([blob], filename, { type: "image/png" });
+      if (navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: "SI FOUR AM", text }); return; }
+    }
+  } catch (e) { if (e?.name === "AbortError") return; }
+  openWA(text, phone);
+};
+
+export const nowTime = () => new Date().toLocaleTimeString("id-ID", { hour12: false }).replace(/\./g, ":");
+
 export const compressImage = (file, max = 640) =>
   new Promise((resolve) => {
     const img = new Image();

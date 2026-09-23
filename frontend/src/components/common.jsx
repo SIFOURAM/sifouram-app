@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Camera, Download, MessageCircle, X } from "lucide-react";
 import { Dialog, DialogContent } from "./ui/dialog";
-import { compressImage, rangeFor, screenshotEl, openWA } from "../lib/helpers";
+import { compressImage, rangeFor, screenshotEl, shareReceipt } from "../lib/helpers";
 import { useT } from "../lib/i18n";
 
 export const PageHeader = ({ eyebrow, title, children }) => (
@@ -72,14 +72,15 @@ export function DateFilter({ onChange, showCustom = true }) {
   );
 }
 
-export function PhotoCapture({ value, onChange, label = "Take Photo", testId }) {
+export function PhotoCapture({ value, onChange, label, testId }) {
   const ref = useRef();
+  const { t } = useT();
   return (
     <div>
       <input ref={ref} type="file" accept="image/*" capture="environment" className="hidden" onChange={async (e) => { const f = e.target.files?.[0]; if (f) onChange(await compressImage(f)); }} />
       <button type="button" data-testid={testId} onClick={() => ref.current.click()}
         className="w-full aspect-video rounded-2xl border-2 border-dashed border-border hover:border-primary/60 transition-colors flex items-center justify-center overflow-hidden bg-muted/40">
-        {value ? <img src={value} alt="captured" className="w-full h-full object-cover" /> : <span className="flex items-center gap-2 text-sm text-muted-foreground"><Camera className="w-5 h-5" />{label}</span>}
+        {value ? <img src={value} alt="captured" className="w-full h-full object-cover" /> : <span className="flex items-center gap-2 text-sm text-muted-foreground"><Camera className="w-5 h-5" />{label || t("takePhoto")}</span>}
       </button>
     </div>
   );
@@ -112,7 +113,7 @@ export function ReceiptModal({ open, onClose, title, waText, waPhone, filename =
           </div>
           <div className="flex gap-2 mt-4">
             <button data-testid="receipt-download" onClick={() => screenshotEl(ref.current, filename)} className="btn-ghost flex-1"><Download className="w-4 h-4" />PNG</button>
-            {waText && <button data-testid="receipt-whatsapp" onClick={() => openWA(waText, waPhone)} className="btn-wa flex-1"><MessageCircle className="w-4 h-4" />WhatsApp</button>}
+            {waText && <button data-testid="receipt-whatsapp" onClick={() => shareReceipt(ref.current, waText, filename, waPhone)} className="btn-wa flex-1"><MessageCircle className="w-4 h-4" />WhatsApp</button>}
           </div>
         </div>
       </DialogContent>

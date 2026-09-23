@@ -3,7 +3,7 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-import os, uuid, logging, bcrypt, jwt
+import os, uuid, logging, bcrypt, jwt, requests, threading
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Dict, Any
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request
@@ -28,6 +28,39 @@ def now_iso():
 
 def uid():
     return str(uuid.uuid4())
+
+
+WIB = timezone(timedelta(hours=7))
+
+
+def now_wib():
+    return datetime.now(WIB).strftime("%H:%M:%S")
+
+
+BUNDLES = {1: {"cups": 4, "price": 45000, "name": "BUNDLING 1"}, 2: {"cups": 10, "price": 110000, "name": "BUNDLING 2"}}
+ALLOWANCE = 20000
+_gs_url_cache: Dict[str, Any] = {"url": None}
+
+
+async def gs_url() -> Optional[str]:
+    cfg = await db.config.find_one({"key": "apps_script_url"})
+    return (cfg or {}).get("value") or os.environ.get("GOOGLE_APPS_SCRIPT_URL")
+
+
+def _gs_post(url: str, payload: dict):
+    try:
+        requests.post(url, json=payload, timeout=20)
+    except Exception as e:
+        logger.warning(f"Apps Script sync failed: {e}")
+
+
+async def gs_sync(sheet: str, record: dict, photo: Optional[str] = None, photo_name: str = ""):
+    """Fire-and-forget sync to Google Sheets / Drive via Apps Script web app."""
+    url = await gs_url()
+    if not url:
+        return
+    rec = {k: v for k, v in record.items() if k not in ("photo", "checkin_photo", "checkout_photo", "_id")}
+    threading.Thread(target=_gs_post, args=(url, {"sheet": sheet, "record": rec, "photo": photo, "photo_name": photo_name}), daemon=True).start()
 
 
 def hash_pw(p: str) -> str:
@@ -129,6 +162,8 @@ class InvTxIn(BaseModel):
     qty: float
     note: str = ""
     date: str
+    item_name: str = ""
+    supplier: str = ""
 
 
 class RecipeItem(BaseModel):
@@ -170,8 +205,10 @@ class RiderStockIn(BaseModel):
 
 
 class SaleItem(BaseModel):
-    menu_id: str
-    qty: int
+    menu_id: Optional[str] = None
+    qty: int = 1
+    bundle: Optional[int] = None
+    components: Optional[Dict[str, int]] = None  # menu_id -> cups (for bundles)
 
 
 class SaleIn(BaseModel):
@@ -182,6 +219,7 @@ class SaleIn(BaseModel):
     items: List[SaleItem]
     payment_method: str = "cash"
     cash_received: float = 0
+    client_id: Optional[str] = None
 
 
 class DepositRow(BaseModel):
@@ -193,11 +231,19 @@ class DepositRow(BaseModel):
     wastage: int
 
 
+class BundleIn(BaseModel):
+    bundle: int
+    method: str  # cash | qris
+    qty: int
+    items: Dict[str, int]
+
+
 class DepositIn(BaseModel):
     rider_id: str
     date: str
     pic_id: Optional[str] = None
     rows: List[DepositRow]
+    bundles: List[BundleIn] = []
     debt_payment: float = 0
     expenses: float = 0
     expense_note: str = ""
@@ -216,7 +262,14 @@ class InvoiceIn(BaseModel):
     rows: List[InvoiceRow]
     payment_method: str = "cash"
     discount: float = 0
+    down_payment: float = 0
     note: str = ""
+    client_id: Optional[str] = None
+
+
+class PayIn(BaseModel):
+    amount: float
+    method: str = "cash"
 
 
 class ExpenseIn(BaseModel):
@@ -228,12 +281,35 @@ class ExpenseIn(BaseModel):
     type: str = "expense"  # expense | income
 
 
+class HandoverExpense(BaseModel):
+    name: str
+    amount: float
+
+
 class HandoverIn(BaseModel):
     date: str
+    period_start: str
+    period_end: str
     giver_id: str
     receiver_id: str
+    expected_cash: float
+    received_cash: float
+    expenses: List[HandoverExpense] = []
+    note: str = ""
+    client_id: Optional[str] = None
+
+
+class WithdrawalIn(BaseModel):
+    rider_id: str
+    date: str
+    type: str  # allowance | incentive
+    method: str  # cash | bank
     amount: float
     note: str = ""
+
+
+class ConfigIn(BaseModel):
+    apps_script_url: str
 
 
 class GpsIn(BaseModel):
@@ -287,6 +363,15 @@ async def seed():
             menus.append({"id": uid(), "name": name, "price": price, "max_stock": mx, "order": i + 1, "photo": MENU_PHOTOS.get(name),
                           "recipe": [{"material_id": mats[m], "qty": q} for m, q in recipe], "stock": 100, "active": True, "created_at": now_iso()})
         await db.menus.insert_many(menus)
+    # migration: every menu recipe includes 1 pc of each packaging material
+    pack = await db.materials.find({"category": "packaging"}, NOID).to_list(50)
+    async for mn in db.menus.find({}, NOID):
+        have = {r["material_id"] for r in mn.get("recipe", [])}
+        add = [{"material_id": p["id"], "qty": 1} for p in pack if p["id"] not in have]
+        if add:
+            await db.menus.update_one({"id": mn["id"]}, {"$set": {"recipe": mn["recipe"] + add}})
+    await db.sales.create_index("client_id", unique=True, sparse=True)
+    await db.withdrawals.create_index([("rider_id", 1), ("date", 1)])
 
 
 @app.on_event("startup")
@@ -376,9 +461,6 @@ def menu_cost(menu: dict, mats: Dict[str, dict]) -> float:
         m = mats.get(r["material_id"])
         if m and m["pack_qty"]:
             cost += r["qty"] / m["pack_qty"] * m["pack_price"]
-    for m in mats.values():
-        if m["category"] == "packaging" and m["pack_qty"]:
-            cost += m["pack_price"] / m["pack_qty"]
     return round(cost)
 
 
@@ -427,9 +509,11 @@ async def create_inv_tx(body: InvTxIn, u=Depends(STAFF)):
         raise HTTPException(400, "Invalid type")
     await db.materials.update_one({"id": m["id"]}, {"$set": {"stock": new_stock}})
     doc = {"id": uid(), "material_id": m["id"], "material_name": m["name"], "unit": m["unit"], "type": body.type, "qty": body.qty,
-           "before": m["stock"], "after": new_stock, "cost": round(cost), "note": body.note, "date": body.date, "user": u["name"], "created_at": now_iso()}
+           "before": m["stock"], "after": new_stock, "cost": round(cost), "note": body.note, "date": body.date, "time": now_wib(),
+           "item_name": body.item_name, "supplier": body.supplier, "user": u["name"], "created_at": now_iso()}
     await db.inventory_tx.insert_one(doc)
     doc.pop("_id", None)
+    await gs_sync("inventory", doc)
     return doc
 
 
@@ -490,9 +574,6 @@ async def produce(body: ProduceIn, u=Depends(STAFF)):
                 await db.inventory_tx.insert_one({"id": uid(), "material_id": mt["id"], "material_name": mt["name"], "unit": mt["unit"], "type": "out", "qty": used,
                                                   "before": mt["stock"], "after": mt["stock"] - used, "cost": 0, "note": f"Production {mn['name']} x{body.qty}",
                                                   "date": body.date, "user": u["name"], "created_at": now_iso()})
-        for mt in mats.values():
-            if mt["category"] == "packaging":
-                await db.materials.update_one({"id": mt["id"]}, {"$inc": {"stock": -body.qty}})
         new_stock = mn["stock"] + body.qty
     else:
         new_stock = body.qty
@@ -527,12 +608,13 @@ async def checkin(body: AttendanceIn, u=Depends(ANY)):
         raise HTTPException(401, "Wrong rider PIN")
     if await db.attendance.find_one({"rider_id": body.rider_id, "date": body.date}):
         raise HTTPException(409, "Attendance already recorded today")
-    doc = {"id": uid(), "rider_id": rider["id"], "rider_name": rider["name"], "date": body.date, "checkin_at": now_iso(), "checkin_photo": body.photo,
-           "checkout_at": None, "checkout_photo": None, "lat": body.lat, "lng": body.lng}
+    doc = {"id": uid(), "rider_id": rider["id"], "rider_name": rider["name"], "date": body.date, "checkin_at": now_iso(), "checkin_time": now_wib(), "checkin_photo": body.photo,
+           "checkout_at": None, "checkout_time": None, "checkout_photo": None, "lat": body.lat, "lng": body.lng}
     await db.attendance.insert_one(doc)
     if body.lat is not None:
         await db.gps.update_one({"rider_id": rider["id"]}, {"$set": {"rider_id": rider["id"], "lat": body.lat, "lng": body.lng, "updated_at": now_iso()}}, upsert=True)
     doc.pop("_id", None)
+    await gs_sync("attendance", {**doc, "event": "checkin"}, body.photo, f"checkin_{rider['name']}_{body.date}.jpg")
     return doc
 
 
@@ -546,8 +628,10 @@ async def checkout(body: AttendanceIn, u=Depends(ANY)):
         raise HTTPException(404, "No check-in found today")
     if att.get("checkout_at"):
         raise HTTPException(409, "Already checked out today")
-    await db.attendance.update_one({"id": att["id"]}, {"$set": {"checkout_at": now_iso(), "checkout_photo": body.photo}})
-    return await db.attendance.find_one({"id": att["id"]}, NOID)
+    await db.attendance.update_one({"id": att["id"]}, {"$set": {"checkout_at": now_iso(), "checkout_time": now_wib(), "checkout_photo": body.photo}})
+    doc = await db.attendance.find_one({"id": att["id"]}, NOID)
+    await gs_sync("attendance", {**doc, "event": "checkout"}, body.photo, f"checkout_{rider['name']}_{body.date}.jpg")
+    return doc
 
 
 # ---------- Rider stock ----------
@@ -570,6 +654,9 @@ async def save_rider_stock(body: RiderStockIn, u=Depends(STAFF)):
     if not rider:
         raise HTTPException(404, "Rider not found")
     prev = await db.rider_stock.find_one({"rider_id": body.rider_id, "date": body.date}, NOID)
+    photo = body.photo or (prev or {}).get("photo")
+    if not photo:
+        raise HTTPException(400, "Photo evidence is required")
     prev_items = prev["items"] if prev else {}
     menus = {m["id"]: m for m in await db.menus.find({}, NOID).to_list(100)}
     for mid, qty in body.items.items():
@@ -577,9 +664,11 @@ async def save_rider_stock(body: RiderStockIn, u=Depends(STAFF)):
         if delta and mid in menus:
             await db.menus.update_one({"id": mid}, {"$inc": {"stock": -delta}})
     total = sum(body.items.values())
-    doc = {"id": prev["id"] if prev else uid(), "rider_id": rider["id"], "rider_name": rider["name"], "date": body.date, "items": body.items,
-           "total": total, "photo": body.photo or (prev or {}).get("photo"), "created_by": u["name"], "updated_at": now_iso()}
+    doc = {"id": prev["id"] if prev else uid(), "rider_id": rider["id"], "rider_name": rider["name"], "pic_id": u["id"], "pic_name": u["name"], "date": body.date,
+           "time": now_wib(), "items": body.items, "detail": {menus[k]["name"]: v for k, v in body.items.items() if k in menus}, "total": total, "photo": photo,
+           "motivation": "🔥 Keep up the sales! 🚀☕", "created_by": u["name"], "updated_at": now_iso()}
     await db.rider_stock.update_one({"rider_id": body.rider_id, "date": body.date}, {"$set": doc}, upsert=True)
+    await gs_sync("rider_stock", doc, body.photo, f"stock_{rider['name']}_{body.date}.jpg")
     return doc
 
 
@@ -590,13 +679,16 @@ async def pos_stock(rider_id: str, date: str):
     sold: Dict[str, int] = {}
     async for s in db.sales.find({"rider_id": rider_id, "date": date}, NOID):
         for it in s["items"]:
-            sold[it["menu_id"]] = sold.get(it["menu_id"], 0) + it["qty"]
+            for mid, q in (it.get("components") or {it["menu_id"]: it["qty"]}).items():
+                sold[mid] = sold.get(mid, 0) + q
     menus = await menus_full()
     out = []
     for m in menus:
-        out.append({"menu_id": m["id"], "name": m["name"], "price": m["price"], "photo": m.get("photo"), "order": m["order"],
+        out.append({"menu_id": m["id"], "name": m["name"], "price": m["price"], "photo": m.get("photo"), "order": m["order"], "cost": m["cost"],
                     "initial": initial.get(m["id"], 0), "sold": sold.get(m["id"], 0), "remaining": initial.get(m["id"], 0) - sold.get(m["id"], 0)})
-    return {"has_stock": rs is not None, "items": out}
+    closed = await db.eod.find_one({"rider_id": rider_id, "date": date}, NOID)
+    deposited = await db.deposits.find_one({"rider_id": rider_id, "date": date}, {"_id": 0, "id": 1})
+    return {"has_stock": rs is not None, "closed": bool(closed), "deposited": bool(deposited), "items": out, "bundles": BUNDLES}
 
 
 @api.get("/pos/stock")
@@ -608,24 +700,48 @@ async def get_pos_stock(rider_id: str, date: str, u=Depends(ANY)):
 async def create_sale(body: SaleIn, u=Depends(ANY)):
     if u["role"] == "rider" and body.rider_id != u["id"]:
         raise HTTPException(403, "Riders can only sell for themselves")
+    if body.client_id:
+        ex = await db.sales.find_one({"client_id": body.client_id}, NOID)
+        if ex:
+            return ex
     st = await pos_stock(body.rider_id, body.date)
+    if not st["has_stock"]:
+        raise HTTPException(400, "No initial stock for today")
+    if st["closed"] or st["deposited"]:
+        raise HTTPException(400, "Sales are closed for today (EOD/deposit done)")
     stock = {i["menu_id"]: i for i in st["items"]}
+    need: Dict[str, int] = {}
     items, total = [], 0
     for it in body.items:
-        s = stock.get(it.menu_id)
-        if not s:
-            raise HTTPException(404, "Menu not found")
-        if s["remaining"] < it.qty:
-            raise HTTPException(400, f"Insufficient stock for {s['name']} (remaining {s['remaining']})")
-        sub = s["price"] * it.qty
+        if it.bundle:
+            b = BUNDLES.get(it.bundle)
+            comps = it.components or {}
+            if not b or sum(comps.values()) != b["cups"] * it.qty:
+                raise HTTPException(400, f"Bundle {it.bundle} needs exactly {b['cups'] if b else '?'} cups per bundle")
+            for mid, q in comps.items():
+                if stock.get(mid, {}).get("price") != 12000:
+                    raise HTTPException(400, "Only Rp 12.000 menus can be bundled")
+                need[mid] = need.get(mid, 0) + q
+            sub = b["price"] * it.qty
+            items.append({"menu_id": None, "bundle": it.bundle, "name": f"{b['name']} ({b['cups']} cups)", "qty": it.qty, "price": b["price"], "subtotal": sub,
+                          "components": comps, "component_names": {stock[m]["name"]: q for m, q in comps.items()}})
+        else:
+            s = stock.get(it.menu_id)
+            if not s:
+                raise HTTPException(404, "Menu not found")
+            need[it.menu_id] = need.get(it.menu_id, 0) + it.qty
+            sub = s["price"] * it.qty
+            items.append({"menu_id": it.menu_id, "name": s["name"], "qty": it.qty, "price": s["price"], "subtotal": sub})
         total += sub
-        items.append({"menu_id": it.menu_id, "name": s["name"], "qty": it.qty, "price": s["price"], "subtotal": sub})
+    for mid, q in need.items():
+        if stock[mid]["remaining"] < q:
+            raise HTTPException(400, f"Insufficient stock for {stock[mid]['name']} (remaining {stock[mid]['remaining']})")
     cnt = await db.sales.count_documents({"date": body.date})
     receipt_no = f"S4-{body.date.replace('-', '')}-{cnt + 1:04d}"
     rider = await db.users.find_one({"id": body.rider_id}, NOID)
     cash_received = body.cash_received if body.payment_method == "cash" else total
-    doc = {"id": uid(), "receipt_no": receipt_no, "rider_id": body.rider_id, "rider_name": rider["name"] if rider else "", "date": body.date,
-           "customer_name": body.customer_name, "customer_phone": body.customer_phone, "items": items, "total": total, "cups": sum(i["qty"] for i in items),
+    doc = {"id": uid(), "client_id": body.client_id or uid(), "receipt_no": receipt_no, "rider_id": body.rider_id, "rider_name": rider["name"] if rider else "", "date": body.date, "time": now_wib(),
+           "customer_name": body.customer_name, "customer_phone": body.customer_phone, "items": items, "total": total, "cups": sum(need.values()),
            "payment_method": body.payment_method, "cash_received": cash_received, "change": max(0, cash_received - total), "created_at": now_iso()}
     await db.sales.insert_one(doc)
     if body.customer_phone or body.customer_name:
@@ -634,6 +750,7 @@ async def create_sale(body: SaleIn, u=Depends(ANY)):
         await db.customers.update_one(key, {"$set": {"name": body.customer_name, "phone": body.customer_phone, "last_visit": body.date},
                                             "$inc": {"points": points, "visits": 1, "total_spent": total}, "$setOnInsert": {"id": uid(), "created_at": now_iso()}}, upsert=True)
     doc.pop("_id", None)
+    await gs_sync("sales", {**doc, "items": "; ".join(f"{i['name']} x{i['qty']}" for i in items)})
     return doc
 
 
@@ -647,27 +764,68 @@ async def list_sales(start: str, end: str, rider_id: Optional[str] = None, u=Dep
     return await db.sales.find(q, NOID).sort("created_at", -1).to_list(1000)
 
 
-@api.get("/sales/eod")
-async def end_of_day(rider_id: str, date: str, u=Depends(ANY)):
+async def eod_summary(rider_id: str, date: str):
     st = await pos_stock(rider_id, date)
     sales = await db.sales.find({"rider_id": rider_id, "date": date}, NOID).to_list(1000)
     menus = {i["menu_id"]: {**i, "cash_qty": 0, "qris_qty": 0, "cash_amt": 0, "qris_amt": 0} for i in st["items"]}
+    bundles = []
     for s in sales:
+        k = "cash" if s["payment_method"] == "cash" else "qris"
         for it in s["items"]:
-            m = menus.get(it["menu_id"])
-            if m:
-                k = "cash" if s["payment_method"] == "cash" else "qris"
-                m[f"{k}_qty"] += it["qty"]
-                m[f"{k}_amt"] += it["subtotal"]
+            if it.get("bundle"):
+                bundles.append({"bundle": it["bundle"], "method": k, "qty": it["qty"], "items": it["components"]})
+                for mid, q in it["components"].items():
+                    if mid in menus:
+                        menus[mid][f"{k}_qty"] += q
+            else:
+                m = menus.get(it["menu_id"])
+                if m:
+                    m[f"{k}_qty"] += it["qty"]
+                    m[f"{k}_amt"] += it["subtotal"]
     rows = list(menus.values())
-    return {"rider_id": rider_id, "date": date, "rows": rows, "transactions": len(sales),
-            "total_cups": sum(r["sold"] for r in rows), "total_cash": sum(r["cash_amt"] for r in rows), "total_qris": sum(r["qris_amt"] for r in rows),
-            "total": sum(r["cash_amt"] + r["qris_amt"] for r in rows)}
+    b_cash = sum(BUNDLES[b["bundle"]]["price"] * b["qty"] for b in bundles if b["method"] == "cash")
+    b_qris = sum(BUNDLES[b["bundle"]]["price"] * b["qty"] for b in bundles if b["method"] == "qris")
+    return {"rider_id": rider_id, "date": date, "rows": rows, "bundles": bundles, "transactions": len(sales), "closed": st["closed"], "deposited": st["deposited"],
+            "total_cups": sum(r["sold"] for r in rows), "total_cash": sum(r["cash_amt"] for r in rows) + b_cash, "total_qris": sum(r["qris_amt"] for r in rows) + b_qris,
+            "total": sum(r["cash_amt"] + r["qris_amt"] for r in rows) + b_cash + b_qris}
+
+
+@api.get("/sales/eod")
+async def end_of_day(rider_id: str, date: str, u=Depends(ANY)):
+    return await eod_summary(rider_id, date)
+
+
+class EodIn(BaseModel):
+    rider_id: str
+    date: str
+
+
+@api.post("/sales/eod/close")
+async def close_eod(body: EodIn, u=Depends(ANY)):
+    if u["role"] == "rider" and body.rider_id != u["id"]:
+        raise HTTPException(403, "Forbidden")
+    s = await eod_summary(body.rider_id, body.date)
+    doc = {"rider_id": body.rider_id, "date": body.date, "time": now_wib(), "closed_by": u["name"], "total_cups": s["total_cups"], "total_cash": s["total_cash"], "total_qris": s["total_qris"], "closed_at": now_iso()}
+    await db.eod.update_one({"rider_id": body.rider_id, "date": body.date}, {"$set": doc}, upsert=True)
+    await gs_sync("eod", doc)
+    return {**s, "closed": True}
 
 
 @api.get("/customers")
 async def list_customers(u=Depends(ANY)):
     return await db.customers.find({}, NOID).sort("points", -1).to_list(500)
+
+
+@api.get("/customers/lookup")
+async def lookup_customer(phone: str, u=Depends(ANY)):
+    p = phone.strip()
+    if len(p) < 5:
+        return {"customers": [], "unpaid_invoice": None}
+    custs = await db.customers.find({"phone": {"$regex": f"^{p}"}}, NOID).to_list(10)
+    inv = await db.invoices.find({"customer_phone": {"$regex": f"^{p}"}, "status": "unpaid"}, NOID).sort("created_at", -1).limit(1).to_list(1)
+    if not custs and inv:
+        custs = [{"name": inv[0]["customer_name"], "phone": inv[0]["customer_phone"]}]
+    return {"customers": custs, "unpaid_invoice": inv[0] if inv else None}
 
 
 # ---------- Deposits ----------
@@ -696,38 +854,65 @@ async def save_deposit(body: DepositIn, u=Depends(STAFF)):
     rider = await db.users.find_one({"id": body.rider_id}, NOID)
     pic = await db.users.find_one({"id": body.pic_id}, NOID) if body.pic_id else u
     menus = {m["id"]: m for m in await db.menus.find({}, NOID).to_list(100)}
-    rows, cups, cash, qris, minus, wastage_total = [], 0, 0, 0, 0, 0
+    # bundle cups per menu & method
+    b_cups: Dict[str, Dict[str, int]] = {}
+    b_cash = b_qris = 0
+    bundles_out = []
+    for b in body.bundles:
+        spec = BUNDLES.get(b.bundle)
+        if not spec or b.qty <= 0:
+            continue
+        if sum(b.items.values()) != spec["cups"] * b.qty:
+            raise HTTPException(400, f"Bundling {b.bundle}: total cups must be {spec['cups'] * b.qty}")
+        for mid, q in b.items.items():
+            if menus.get(mid, {}).get("price") != 12000:
+                raise HTTPException(400, "Only Rp 12.000 menus can be bundled")
+            b_cups.setdefault(mid, {"cash": 0, "qris": 0})[b.method] += q
+        amt = spec["price"] * b.qty
+        if b.method == "cash":
+            b_cash += amt
+        else:
+            b_qris += amt
+        bundles_out.append({"bundle": b.bundle, "name": spec["name"], "method": b.method, "qty": b.qty, "amount": amt, "items": {menus[m]["name"]: q for m, q in b.items.items() if m in menus}})
+    rows, cups, cash, qris, minus, wastage_total = [], 0, b_cash, b_qris, 0, 0
     for r in body.rows:
         m = menus.get(r.menu_id)
         if not m:
             continue
-        total_sold = r.cash + r.qris
+        bc = b_cups.get(r.menu_id, {"cash": 0, "qris": 0})
+        cash_q, qris_q = r.cash + bc["cash"], r.qris + bc["qris"]
+        total_sold = cash_q + qris_q
         diff = r.stock - (total_sold + r.remaining + r.wastage)
         row_minus = max(0, diff) * m["price"]
-        rows.append({"menu_id": m["id"], "name": m["name"], "price": m["price"], "stock": r.stock, "remaining": r.remaining, "cash": r.cash, "qris": r.qris,
-                     "wastage": r.wastage, "total_sold": total_sold, "diff": diff, "cash_amt": r.cash * m["price"], "qris_amt": r.qris * m["price"], "minus": row_minus})
+        rows.append({"menu_id": m["id"], "name": m["name"], "price": m["price"], "stock": r.stock, "remaining": r.remaining, "cash": cash_q, "qris": qris_q, "cash_manual": r.cash, "qris_manual": r.qris,
+                     "bundle_cash": bc["cash"], "bundle_qris": bc["qris"], "wastage": r.wastage, "total_sold": total_sold, "diff": diff, "cash_amt": r.cash * m["price"], "qris_amt": r.qris * m["price"], "minus": row_minus})
         cups += total_sold
         cash += r.cash * m["price"]
         qris += r.qris * m["price"]
         minus += row_minus
         wastage_total += r.wastage
+        if r.wastage:
+            await db.menu_stock_tx.insert_one({"id": uid(), "menu_id": m["id"], "menu_name": m["name"], "type": "wastage", "qty": r.wastage, "before": m["stock"], "after": m["stock"],
+                                               "note": f"Wastage rider {rider['name']}", "date": body.date, "user": u["name"], "created_at": now_iso()})
     initial_debt = await rider_debt(body.rider_id, body.date)
     remaining_debt = initial_debt + minus - body.debt_payment
+    commission = ALLOWANCE if cups > 0 else 0
     net_cash = cash - body.expenses + body.debt_payment
     if cups <= 30:
         motiv = "Keep up the spirit! Let's tackle tomorrow's route with full energy! 💪🔥"
     elif cups <= 49:
         motiv = "Alhamdulillah, that's amazing! You're almost at the target, let's go all out tomorrow! 🚀📈"
     else:
-        motiv = "🎉 Congratulations! You smashed the target! Keep up the great performance! 🏆☕"
+        motiv = "🎉 Congratulations! Target smashed! Keep up your performance! 🏆☕"
     prev = await db.deposits.find_one({"rider_id": body.rider_id, "date": body.date}, NOID)
     cnt = await db.deposits.count_documents({})
     doc = {"id": prev["id"] if prev else uid(), "receipt_no": prev["receipt_no"] if prev else f"DEP-{body.date.replace('-', '')}-{cnt + 1:03d}",
-           "rider_id": body.rider_id, "rider_name": rider["name"], "pic_id": pic["id"], "pic_name": pic["name"], "date": body.date, "rows": rows,
+           "rider_id": body.rider_id, "rider_name": rider["name"], "pic_id": pic["id"], "pic_name": pic["name"], "date": body.date, "time": now_wib(), "rows": rows, "bundles": bundles_out,
            "total_cups": cups, "total_cash": cash, "total_qris": qris, "total_income": cash + qris, "minus": minus, "total_wastage": wastage_total,
-           "initial_debt": initial_debt, "new_debt": minus, "debt_payment": body.debt_payment, "remaining_debt": remaining_debt,
+           "initial_debt": initial_debt, "new_debt": minus, "debt_payment": body.debt_payment, "remaining_debt": remaining_debt, "commission": commission,
            "expenses": body.expenses, "expense_note": body.expense_note, "net_cash": net_cash, "motivation": motiv, "updated_at": now_iso()}
     await db.deposits.update_one({"rider_id": body.rider_id, "date": body.date}, {"$set": doc}, upsert=True)
+    await gs_sync("deposits", {**doc, "rows": "; ".join(f"{r['name']}: stock {r['stock']} sisa {r['remaining']} cash {r['cash']} qris {r['qris']} waste {r['wastage']}" for r in rows), "bundles": str(bundles_out)})
     return doc
 
 
@@ -739,6 +924,10 @@ async def list_invoices(u=Depends(SUPER)):
 
 @api.post("/invoices")
 async def create_invoice(body: InvoiceIn, u=Depends(SUPER)):
+    if body.client_id:
+        ex = await db.invoices.find_one({"client_id": body.client_id}, NOID)
+        if ex:
+            return ex
     menus = {m["id"]: m for m in await db.menus.find({}, NOID).to_list(100)}
     rows, subtotal = [], 0
     for r in body.rows:
@@ -750,12 +939,27 @@ async def create_invoice(body: InvoiceIn, u=Depends(SUPER)):
         subtotal += price * r.qty
     cnt = await db.invoices.count_documents({})
     total = subtotal - body.discount
-    doc = {"id": uid(), "invoice_no": f"INV-{body.date.replace('-', '')}-{cnt + 1:03d}", "customer_name": body.customer_name, "customer_phone": body.customer_phone,
-           "date": body.date, "rows": rows, "subtotal": subtotal, "discount": body.discount, "total": total, "cups": sum(r["qty"] for r in rows),
-           "payment_method": body.payment_method, "note": body.note, "created_by": u["name"], "created_at": now_iso()}
+    remaining = max(0, total - body.down_payment)
+    doc = {"id": uid(), "client_id": body.client_id or uid(), "invoice_no": f"INV-{body.date.replace('-', '')}-{cnt + 1:03d}", "customer_name": body.customer_name, "customer_phone": body.customer_phone,
+           "date": body.date, "time": now_wib(), "rows": rows, "subtotal": subtotal, "discount": body.discount, "total": total, "down_payment": body.down_payment, "paid": body.down_payment,
+           "remaining": remaining, "status": "paid" if remaining <= 0 else "unpaid", "payments": ([{"date": body.date, "amount": body.down_payment, "method": body.payment_method}] if body.down_payment else []),
+           "cups": sum(r["qty"] for r in rows), "payment_method": body.payment_method, "note": body.note, "created_by": u["name"], "created_at": now_iso()}
     await db.invoices.insert_one(doc)
     doc.pop("_id", None)
+    await gs_sync("invoices", {**doc, "rows": "; ".join(f"{r['name']} x{r['qty']}" for r in rows), "payments": str(doc["payments"])})
     return doc
+
+
+@api.post("/invoices/{iid}/pay")
+async def pay_invoice(iid: str, body: PayIn, u=Depends(SUPER)):
+    inv = await db.invoices.find_one({"id": iid}, NOID)
+    if not inv:
+        raise HTTPException(404, "Invoice not found")
+    paid = inv.get("paid", 0) + body.amount
+    remaining = max(0, inv["total"] - paid)
+    await db.invoices.update_one({"id": iid}, {"$set": {"paid": paid, "remaining": remaining, "status": "paid" if remaining <= 0 else "unpaid"},
+                                               "$push": {"payments": {"date": datetime.now(WIB).strftime("%Y-%m-%d"), "amount": body.amount, "method": body.method}}})
+    return await db.invoices.find_one({"id": iid}, NOID)
 
 
 # ---------- Expenses / Handover ----------
@@ -780,16 +984,65 @@ async def delete_expense(eid: str, u=Depends(SUPER)):
 
 @api.get("/handovers")
 async def list_handovers(start: str, end: str, u=Depends(SUPER)):
-    return await db.handovers.find({"date": {"$gte": start, "$lte": end}}, NOID).sort("date", -1).to_list(500)
+    return await db.handovers.find({"date": {"$gte": start, "$lte": end}}, NOID).sort("created_at", -1).to_list(500)
+
+
+@api.get("/handovers/expected")
+async def handover_expected(start: str, end: str, u=Depends(SUPER)):
+    deps = await db.deposits.find({"date": {"$gte": start, "$lte": end}}, NOID).to_list(2000)
+    prev = await db.handovers.find({"period_start": start, "period_end": end}, NOID).to_list(100)
+    return {"expected_cash": sum(d["net_cash"] for d in deps), "deposits": [{"date": d["date"], "rider_name": d["rider_name"], "net_cash": d["net_cash"], "pic_name": d["pic_name"]} for d in deps],
+            "already_received": sum(h["received_cash"] for h in prev)}
 
 
 @api.post("/handovers")
 async def create_handover(body: HandoverIn, u=Depends(SUPER)):
+    if body.client_id:
+        ex = await db.handovers.find_one({"client_id": body.client_id}, NOID)
+        if ex:
+            return ex
     g = await db.users.find_one({"id": body.giver_id}, NOID)
     r = await db.users.find_one({"id": body.receiver_id}, NOID)
-    doc = {**body.model_dump(), "id": uid(), "giver_name": g["name"] if g else "", "receiver_name": r["name"] if r else "", "created_at": now_iso()}
+    total_exp = sum(e.amount for e in body.expenses)
+    hid = uid()
+    for e in body.expenses:
+        if e.amount:
+            await db.expenses.insert_one({"id": uid(), "date": body.date, "category": "Handover Expense", "amount": e.amount, "note": e.name, "account": "cash", "type": "expense",
+                                          "handover_id": hid, "user": u["name"], "created_at": now_iso()})
+    doc = {**body.model_dump(), "id": hid, "client_id": body.client_id or hid, "time": now_wib(), "giver_name": g["name"] if g else "", "receiver_name": r["name"] if r else "",
+           "total_expenses": total_exp, "difference": body.expected_cash - body.received_cash - total_exp, "created_by": u["name"], "created_at": now_iso()}
     await db.handovers.insert_one(doc)
     doc.pop("_id", None)
+    await gs_sync("handovers", {**doc, "expenses": "; ".join(f"{e.name}: {e.amount}" for e in body.expenses)})
+    return doc
+
+
+# ---------- Withdrawals (allowance / incentive) ----------
+@api.get("/withdrawals")
+async def list_withdrawals(start: str, end: str, rider_id: Optional[str] = None, u=Depends(ANY)):
+    q: Dict[str, Any] = {"date": {"$gte": start, "$lte": end}}
+    if u["role"] == "rider":
+        q["rider_id"] = u["id"]
+    elif rider_id:
+        q["rider_id"] = rider_id
+    return await db.withdrawals.find(q, NOID).sort("created_at", -1).to_list(500)
+
+
+@api.post("/withdrawals")
+async def create_withdrawal(body: WithdrawalIn, start: str, end: str, u=Depends(ANY)):
+    if u["role"] == "rider" and body.rider_id != u["id"]:
+        raise HTTPException(403, "Forbidden")
+    sal = await salary(start, end, body.rider_id, u)
+    rs = sal["riders"][0] if sal["riders"] else None
+    if not rs:
+        raise HTTPException(404, "Rider not found")
+    avail = rs["allowance_available"] if body.type == "allowance" else rs["incentive_available"]
+    if body.amount <= 0 or body.amount > avail + 0.01:
+        raise HTTPException(400, f"Amount exceeds available balance ({avail:.0f})")
+    doc = {**body.model_dump(), "id": uid(), "rider_name": rs["rider_name"], "time": now_wib(), "period_start": start, "period_end": end, "approved_by": u["name"], "created_at": now_iso()}
+    await db.withdrawals.insert_one(doc)
+    doc.pop("_id", None)
+    await gs_sync("withdrawals", doc)
     return doc
 
 
@@ -870,6 +1123,7 @@ async def salary(start: str, end: str, rider_id: Optional[str] = None, u=Depends
     if rider_id:
         att_q["rider_id"] = rider_id
     atts = await db.attendance.find(att_q, NOID).to_list(2000)
+    wds = await db.withdrawals.find(att_q, NOID).to_list(2000)
     out = []
     for r in riders:
         mine = [x for x in recs if x["rider_id"] == r["id"]]
@@ -877,14 +1131,17 @@ async def salary(start: str, end: str, rider_id: Optional[str] = None, u=Depends
         cups = sum(x["cups"] for x in mine)
         att_days = len([a for a in atts if a["rider_id"] == r["id"]])
         sale_days = set(x["date"] for x in mine)
-        allowance_days = len([x for x in mine if x["cups"] > 20])
-        allowance = allowance_days * 20000
+        allowance_days = len(set([a["date"] for a in atts if a["rider_id"] == r["id"]] + list(sale_days)))
+        allowance = allowance_days * ALLOWANCE
         tier, pct = tier_for(gross, att_days)
         incentive = round(gross * pct)
+        aw = sum(w["amount"] for w in wds if w["rider_id"] == r["id"] and w["type"] == "allowance")
+        iw = sum(w["amount"] for w in wds if w["rider_id"] == r["id"] and w["type"] == "incentive")
         nxt = next(((n, th, p, d) for n, th, p, d in TIERS if gross < th), None)
         out.append({"rider_id": r["id"], "rider_name": r["name"], "photo": r.get("photo"), "joined_at": r.get("joined_at"), "placement": r.get("placement"),
                     "gross": gross, "cups": cups, "attendance_days": att_days, "sales_days": len(sale_days), "allowance_days": allowance_days,
-                    "allowance": allowance, "tier": tier, "incentive_pct": pct, "incentive": incentive, "total_income": allowance + incentive,
+                    "allowance": allowance, "allowance_withdrawn": aw, "allowance_available": allowance - aw, "tier": tier, "incentive_pct": pct, "incentive": incentive,
+                    "incentive_withdrawn": iw, "incentive_available": incentive - iw, "total_income": allowance + incentive,
                     "next_tier": {"name": nxt[0], "threshold": nxt[1], "pct": nxt[2], "min_days": nxt[3], "remaining": nxt[1] - gross,
                                   "progress": round(gross / nxt[1] * 100, 1)} if nxt else None})
     return {"riders": out, "tiers": [{"name": n, "threshold": th, "pct": p, "min_days": d} for n, th, p, d in TIERS], "rider_count": len(out)}
@@ -907,9 +1164,11 @@ async def finance_summary(start: str, end: str, u=Depends(SUPER)):
         ledger.append({"date": i["date"], "type": "in", "account": "cash" if i["payment_method"] == "cash" else "bank", "category": "Order Invoice", "desc": f"{i['invoice_no']} {i['customer_name']}", "amount": i["total"]})
     for p in purchases:
         if p["cost"]:
-            ledger.append({"date": p["date"], "type": "out", "account": "cash", "category": "Purchase", "desc": f"{p['material_name']} +{p['qty']}{p['unit']}", "amount": p["cost"]})
+            ledger.append({"date": p["date"], "type": "out", "account": "cash", "category": "Purchase", "desc": f"{p.get('item_name') or p['material_name']} → {p['material_name']} +{p['qty']}{p['unit']}" + (f" ({p['supplier']})" if p.get("supplier") else ""), "amount": p["cost"], "item_name": p.get("item_name", ""), "material_name": p["material_name"]})
     for e in expenses:
         ledger.append({"date": e["date"], "type": "in" if e.get("type") == "income" else "out", "account": e.get("account", "cash"), "category": e["category"], "desc": e.get("note", ""), "amount": e["amount"], "id": e["id"]})
+    for w in await db.withdrawals.find({"date": {"$gte": start, "$lte": end}}, NOID).to_list(2000):
+        ledger.append({"date": w["date"], "type": "out", "account": w["method"], "category": "Rider Allowance" if w["type"] == "allowance" else "Rider Incentive", "desc": w["rider_name"], "amount": w["amount"]})
     ledger.sort(key=lambda x: x["date"])
     bal = {"cash": 0, "bank": 0}
     for l in ledger:
@@ -949,6 +1208,17 @@ async def gps_active(date: str, u=Depends(ANY)):
     for p in pts:
         p["rider_name"] = names.get(p["rider_id"], p.get("rider_name"))
     return pts
+
+
+@api.get("/config")
+async def get_config(u=Depends(STAFF)):
+    return {"apps_script_url": await gs_url() or ""}
+
+
+@api.put("/config")
+async def put_config(body: ConfigIn, u=Depends(SUPER)):
+    await db.config.update_one({"key": "apps_script_url"}, {"$set": {"key": "apps_script_url", "value": body.apps_script_url.strip()}}, upsert=True)
+    return {"apps_script_url": body.apps_script_url.strip()}
 
 
 @api.get("/")

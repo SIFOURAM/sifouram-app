@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { MessageCircle, FileDown, Plus } from "lucide-react";
 import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import { api, errMsg } from "../lib/api";
-import { fmtRp, today, openWA } from "../lib/helpers";
+import { fmtRp, today, openWA, fmtDate, nowTime } from "../lib/helpers";
 import { useT } from "../lib/i18n";
 import { PageHeader, Bento, Field, Select } from "../components/common";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
@@ -16,7 +17,7 @@ export default function Inventory() {
   const [menus, setMenus] = useState([]);
   const [tx, setTx] = useState([]);
   const [tab, setTab] = useState("stock");
-  const [form, setForm] = useState({ material_id: "", type: "in", qty: "", note: "", date: today() });
+  const [form, setForm] = useState({ material_id: "", type: "in", qty: "", note: "", date: today(), item_name: "", supplier: "" });
   const [newMat, setNewMat] = useState(null);
 
   const load = () => Promise.all([api.get("/materials"), api.get("/menus"), api.get("/inventory/tx")]).then(([a, b, c]) => { setMats(a.data); setMenus(b.data); setTx(c.data); });
@@ -40,18 +41,21 @@ export default function Inventory() {
     (low.length ? low.map((m) => `🛒 ${m.name}: ${Math.max(1, Math.ceil((m.pack_qty * 2 - m.stock) / m.pack_qty))} ${m.pack_label} @ ${fmtRp(m.pack_price)}`).join("\n") : "All items sufficient ✅") +
     `\n----------------------------------\n💰 Est. total: ${fmtRp(low.reduce((s, m) => s + Math.max(1, Math.ceil((m.pack_qty * 2 - m.stock) / m.pack_qty)) * m.pack_price, 0))}`;
 
-  const pdf = (title, rows) => {
-    const doc = new jsPDF();
-    doc.setFontSize(16); doc.text(`SI FOUR AM — ${title}`, 14, 18); doc.setFontSize(10); doc.text(today(), 14, 25);
-    let y = 35; rows.forEach((r) => { doc.text(r, 14, y); y += 7; if (y > 280) { doc.addPage(); y = 20; } });
-    doc.save(`si4am-${title.toLowerCase().replace(/\s/g, "-")}.pdf`);
+  const pdf = (title, head, body) => {
+    const doc = new jsPDF({ orientation: "landscape" });
+    const stamp = `${fmtDate(today())} ${nowTime()} WIB`;
+    doc.setFontSize(15); doc.text(`SI FOUR AM — ${title}`, 14, 14); doc.setFontSize(9); doc.text(stamp, 14, 20);
+    autoTable(doc, { startY: 25, head: [head], body, styles: { fontSize: 8, cellPadding: 2, lineWidth: 0.1, lineColor: [180, 180, 180] }, headStyles: { fillColor: [255, 107, 0] }, theme: "grid" });
+    doc.save(`si4am-${title.toLowerCase().replace(/\s/g, "-")}-${today()}.pdf`);
   };
+  const stockRows = () => mats.map((m) => [m.name, m.category, `${Math.round(m.stock).toLocaleString()} ${m.unit}`, `${packs(m)} ${m.pack_label}`, `${m.pack_qty} ${m.unit}`, fmtRp(m.pack_price), fmtRp((m.stock / m.pack_qty) * m.pack_price), m.stock <= m.min_stock ? "LOW" : "OK"]);
+  const orderRows = () => low.map((m) => { const n = Math.max(1, Math.ceil((m.pack_qty * 2 - m.stock) / m.pack_qty)); return [m.name, `${Math.round(m.stock)} ${m.unit}`, `${n} ${m.pack_label}`, fmtRp(m.pack_price), fmtRp(n * m.pack_price)]; });
 
   return (
     <div data-testid="inventory-page">
       <PageHeader eyebrow="Bar Team" title={t("inventory")}>
-        <button data-testid="wa-stock-button" onClick={() => { pdf("Stock Report", mats.map((m) => `${m.name}: ${Math.round(m.stock)} ${m.unit} (${packs(m)} ${m.pack_label})`)); openWA(stockText()); }} className="btn-wa h-10"><MessageCircle className="w-4 h-4" />Stock</button>
-        <button data-testid="wa-order-button" onClick={() => { pdf("Order Items", low.map((m) => `${m.name}: order ${Math.max(1, Math.ceil((m.pack_qty * 2 - m.stock) / m.pack_qty))} ${m.pack_label}`)); openWA(orderText()); }} className="btn-wa h-10"><FileDown className="w-4 h-4" />Order Items</button>
+        <button data-testid="wa-stock-button" onClick={() => { pdf("Stock Report", ["Material", "Category", "Stock", "Packs", "Pack size", "Pack price", "Stock value", "Status"], stockRows()); openWA(stockText()); }} className="btn-wa h-10"><MessageCircle className="w-4 h-4" />{t("stockReport")}</button>
+        <button data-testid="wa-order-button" onClick={() => { pdf("Order Items", ["Material", "Current stock", "Order qty", "Pack price", "Total"], orderRows()); openWA(orderText()); }} className="btn-wa h-10"><FileDown className="w-4 h-4" />{t("orderItems")}</button>
       </PageHeader>
 
       <div className="flex gap-2 mb-6">{["stock", "recipes", "history"].map((k) => <button key={k} data-testid={`inv-tab-${k}`} onClick={() => setTab(k)} className={`h-9 px-4 rounded-full text-xs font-semibold capitalize ${tab === k ? "bg-primary text-white" : "bg-muted"}`}>{k}</button>)}</div>
@@ -67,7 +71,10 @@ export default function Inventory() {
                 <Field label={`Qty (${mats.find((m) => m.id === form.material_id)?.unit || "unit"})`}><input data-testid="tx-qty-input" type="number" step="any" className="field" value={form.qty} onChange={(e) => setForm({ ...form, qty: e.target.value })} required /></Field>
                 <Field label={t("date")}><input data-testid="tx-date-input" type="date" className="field" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></Field>
               </div>
-              <Field label="Note"><input data-testid="tx-note-input" className="field" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /></Field>
+              {form.type === "in" && <div className="grid grid-cols-2 gap-3">
+                <Field label="Purchased item / brand"><input data-testid="tx-item-input" className="field" value={form.item_name} onChange={(e) => setForm({ ...form, item_name: e.target.value })} placeholder="e.g. Kopi Arabica 1kg" /></Field>
+                <Field label="Supplier / store"><input data-testid="tx-supplier-input" className="field" value={form.supplier} onChange={(e) => setForm({ ...form, supplier: e.target.value })} /></Field></div>}
+              <Field label={t("note")}><input data-testid="tx-note-input" className="field" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /></Field>
               <button data-testid="tx-submit-button" className="btn-primary w-full" disabled={!form.material_id}>{t("save")}</button>
             </form>
             <button data-testid="new-material-button" onClick={() => setNewMat({ name: "", unit: "g", pack_qty: "", pack_price: "", pack_label: "pack", category: "raw" })} className="btn-ghost w-full mt-3"><Plus className="w-4 h-4" />New material</button>
@@ -91,16 +98,16 @@ export default function Inventory() {
               <div className="flex justify-between items-start mb-3"><div><p className="font-heading font-bold">{m.name}</p><p className="text-xs text-muted-foreground">Sell {fmtRp(m.price)}</p></div>
                 <div className="text-right"><p className="eyebrow">HPP</p><p className="num font-bold text-primary">{fmtRp(m.cost)}</p><p className="text-[10px] text-emerald-500 num">margin {fmtRp(m.margin)}</p></div></div>
               <ul className="text-xs space-y-1">{m.recipe.map((r, i) => <li key={i} className="flex justify-between"><span>{r.name}</span><span className="num text-muted-foreground">{r.qty} {r.unit}</span></li>)}
-                <li className="flex justify-between text-muted-foreground pt-1 border-t border-border/50"><span>+ packaging (cup, seal, lid, straw, bag)</span></li></ul>
+                <li className="flex justify-between text-muted-foreground pt-1 border-t border-border/50"><span>{m.recipe.length} {t("items")} incl. packaging</span></li></ul>
             </Bento>))}
         </div>
       )}
 
       {tab === "history" && (
         <Bento className="overflow-x-auto" testId="inventory-history">
-          <table className="table-x"><thead><tr><th>Date</th><th>Material</th><th>Type</th><th>Qty</th><th>After</th><th>Cost</th><th>Note</th><th>By</th></tr></thead>
-            <tbody>{tx.map((x) => <tr key={x.id}><td className="num">{x.date}</td><td>{x.material_name}</td><td><span className={`text-xs font-bold uppercase ${x.type === "in" ? "text-emerald-500" : x.type === "out" ? "text-red-500" : "text-amber-500"}`}>{x.type}</span></td>
-              <td className="num">{x.qty} {x.unit}</td><td className="num">{Math.round(x.after)}</td><td className="num">{x.cost ? fmtRp(x.cost) : "-"}</td><td className="text-muted-foreground text-xs">{x.note}</td><td className="text-xs">{x.user}</td></tr>)}</tbody></table>
+          <table className="table-x"><thead><tr><th>{t("date")}</th><th>{t("material")}</th><th>{t("type")}</th><th>{t("qty")}</th><th>After</th><th>Cost</th><th>Item</th><th>{t("note")}</th><th>By</th></tr></thead>
+            <tbody>{tx.map((x) => <tr key={x.id}><td className="num text-xs">{x.date} {x.time || ""}</td><td>{x.material_name}</td><td><span className={`text-xs font-bold uppercase ${x.type === "in" ? "text-emerald-500" : x.type === "out" ? "text-red-500" : "text-amber-500"}`}>{x.type}</span></td>
+              <td className="num">{x.qty} {x.unit}</td><td className="num">{Math.round(x.after)}</td><td className="num">{x.cost ? fmtRp(x.cost) : "-"}</td><td className="text-xs">{x.item_name}{x.supplier ? ` · ${x.supplier}` : ""}</td><td className="text-muted-foreground text-xs">{x.note}</td><td className="text-xs">{x.user}</td></tr>)}</tbody></table>
         </Bento>
       )}
 

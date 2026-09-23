@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { api, errMsg } from "../lib/api";
-import { today, openWA, fmtDate } from "../lib/helpers";
+import { today, shareReceipt, fmtDate } from "../lib/helpers";
 import { useT } from "../lib/i18n";
+import { useAuth } from "../context/AuthContext";
 import { PageHeader, Bento, Field, Select, QtySelect, PhotoCapture, Empty } from "../components/common";
 
 export default function RiderStock() {
   const { t } = useT();
+  const { user } = useAuth();
+  const [busy, setBusy] = useState(false);
   const [riders, setRiders] = useState([]);
   const [menus, setMenus] = useState([]);
   const [riderId, setRiderId] = useState("");
@@ -26,15 +29,18 @@ export default function RiderStock() {
   const rider = riders.find((r) => r.id === riderId);
 
   const save = async () => {
+    if (!photo) return toast.error(t("photoRequired"));
+    if (busy) return;
+    setBusy(true);
     try {
       const { data } = await api.post("/rider-stock", { rider_id: riderId, date, items, photo });
-      toast.success("Rider stock saved & menu stock deducted");
-      const text = `*SI FOUR AM — RIDER INITIAL STOCK*\n🛵 Rider: ${rider.name}\n📅 ${fmtDate(date)}\n----------------------------------\n` +
-        menus.map((m) => `${m.name}: ${items[m.id] || 0}`).join("\n") + `\n----------------------------------\n☕ TOTAL: ${data.total} cups\n📸 Photo evidence: attached (downloaded)`;
-      if (photo) { const a = document.createElement("a"); a.href = photo; a.download = `stock-${rider.name}-${date}.jpg`; a.click(); }
-      openWA(text, rider.whatsapp);
+      toast.success(t("save") + " ✓");
+      let m = `*SI FOUR AM STOCK REPORT*\n--------------------------------------\n👤 Crew Name: ${rider.name}\n👥 PIC: ${data.pic_name}\n📅 Report Date: ${fmtDate(date)} (${data.time} WIB)\n--------------------------------------\n\n*STOCK DETAILS:*\n`;
+      menus.forEach((mn) => { m += `- ${mn.name}: ${items[mn.id] || 0}\n`; });
+      m += `\n--------------------------------------\n📊 GRAND TOTAL: ${data.total} Cups\n--------------------------------------\n_(Photo evidence has been uploaded to the system)_\n\n🔥 Keep up the sales! 🚀☕`;
+      await shareReceipt(null, m, `stock-${rider.name}-${date}.jpg`, rider.whatsapp);
       api.get("/rider-stock/history", { params: { rider_id: riderId, start: "2000-01-01", end: "2100-01-01" } }).then((r) => setHistory(r.data));
-    } catch (e) { toast.error(errMsg(e)); }
+    } catch (e) { toast.error(errMsg(e)); } finally { setBusy(false); }
   };
 
   return (
@@ -42,7 +48,8 @@ export default function RiderStock() {
       <PageHeader eyebrow="Bar Team" title={t("riderStock")} />
       <div className="grid lg:grid-cols-3 gap-6">
         <Bento gold className="lg:col-span-2 fade-up" testId="rider-stock-form">
-          <div className="grid sm:grid-cols-2 gap-3 mb-5">
+          <div className="grid sm:grid-cols-3 gap-3 mb-5">
+            <Field label={`${t("pic")} (auto)`}><input data-testid="rider-stock-pic" className="field bg-muted/50" value={user.name} readOnly /></Field>
             <Field label={t("selectRider")}><Select testId="rider-stock-rider-select" value={riderId} onChange={setRiderId} placeholder="—" options={riders.map((r) => ({ value: r.id, label: r.name }))} /></Field>
             <Field label={t("date")}><input data-testid="rider-stock-date-input" type="date" className="field" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
           </div>
@@ -54,16 +61,16 @@ export default function RiderStock() {
         </Bento>
         <div className="space-y-6">
           <Bento className="fade-up" testId="rider-stock-photo-card">
-            <p className="eyebrow mb-3">Photo Evidence</p>
+            <p className="eyebrow mb-3">{t("photoEvidence")} *</p>
             <PhotoCapture value={photo} onChange={setPhoto} testId="rider-stock-photo" />
-            <button data-testid="rider-stock-save-button" onClick={save} disabled={!riderId} className="btn-primary w-full mt-4">{t("saveRider")}</button>
-            <p className="text-[11px] text-muted-foreground mt-2 text-center">Saves, downloads photo, opens WhatsApp with stock details</p>
+            <button data-testid="rider-stock-save-button" onClick={save} disabled={!riderId || !photo || busy} className="btn-primary w-full mt-4">{t("saveRider")}</button>
+            <p className="text-[11px] text-muted-foreground mt-2 text-center">{photo ? "✓" : "!"} {t("photoRequired")} · WhatsApp</p>
           </Bento>
           <Bento className="fade-up" testId="rider-stock-history">
-            <p className="eyebrow mb-3">History</p>
+            <p className="eyebrow mb-3">{t("history")}</p>
             {history.slice(0, 8).map((h) => <div key={h.id} className="flex items-center gap-3 py-2 border-b border-border/50 text-sm">
               {h.photo ? <img src={h.photo} alt="" className="w-10 h-10 rounded-lg object-cover" /> : <div className="w-10 h-10 rounded-lg bg-muted" />}
-              <span className="flex-1">{fmtDate(h.date)}</span><span className="num font-bold">{h.total} cups</span></div>)}
+              <span className="flex-1">{fmtDate(h.date)} <span className="text-xs text-muted-foreground">{h.time || ""} · {h.pic_name || h.created_by}</span></span><span className="num font-bold">{h.total} cups</span></div>)}
             {!history.length && <Empty text={t("noData")} />}
           </Bento>
         </div>

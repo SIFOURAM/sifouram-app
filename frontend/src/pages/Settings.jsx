@@ -1,10 +1,11 @@
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Moon, Sun, Globe, Bell, MapPin, ShieldCheck } from "lucide-react";
 import { api } from "../lib/api";
 import { useT } from "../lib/i18n";
 import { useAuth } from "../context/AuthContext";
 import { PageHeader, Bento } from "../components/common";
-import { NAV, MORE } from "../components/Layout";
+import { NAV } from "../components/Layout";
 
 const Row = ({ icon: Icon, title, sub, children }) => (
   <div className="flex items-center justify-between py-4 border-b border-border/50 last:border-0 gap-4">
@@ -18,15 +19,17 @@ export default function Settings() {
   const { t, lang, setLang } = useT();
   const { user, setUser, theme, setTheme } = useAuth();
   const s = user.settings || {};
+  const [gsUrl, setGsUrl] = useState("");
+  useEffect(() => { if (user.role !== "rider") api.get("/config").then((r) => setGsUrl(r.data.apps_script_url || "")).catch(() => {}); }, [user.role]);
   const save = async (patch) => { const { data } = await api.put("/settings", patch); setUser({ ...user, settings: data }); toast.success("Settings saved"); };
-  const perms = [...(NAV[user.role] || []), ...(MORE[user.role] || [])].map((i) => t(i.key));
+  const perms = [...NAV[user.role].main, ...NAV[user.role].more].map((i) => t(i.key));
 
   return (
     <div data-testid="settings-page">
       <PageHeader eyebrow="SI FOUR AM" title={t("settings")} />
       <div className="grid lg:grid-cols-2 gap-6">
         <Bento gold className="fade-up" testId="settings-appearance">
-          <p className="eyebrow mb-2">Appearance & language</p>
+          <p className="eyebrow mb-2">{t("appearance")}</p>
           <Row icon={theme === "dark" ? Moon : Sun} title={theme === "dark" ? t("darkMode") : t("lightMode")} sub="Black / white backgrounds">
             <div className="flex gap-1">{["dark", "light"].map((k) => <button key={k} data-testid={`theme-${k}`} onClick={() => { setTheme(k); save({ theme: k }); }} className={`h-9 px-4 rounded-full text-xs font-semibold capitalize ${theme === k ? "bg-primary text-white" : "bg-muted"}`}>{k}</button>)}</div></Row>
           <Row icon={Globe} title={t("language")} sub="English (primary) · Bahasa Indonesia">
@@ -36,10 +39,14 @@ export default function Settings() {
             <select data-testid="gps-mode-select" className="field w-44 h-9" value={s.gps_mode || "while_using"} onChange={(e) => save({ gps_mode: e.target.value })}><option value="while_using">{t("whileUsing")}</option><option value="off">Off</option></select></Row>}
         </Bento>
         <Bento className="fade-up" testId="settings-permissions">
-          <p className="eyebrow mb-2">Permissions · {user.role}</p>
-          <Row icon={ShieldCheck} title="Accessible modules" sub={`${perms.length} modules enabled for your role`} />
+          <p className="eyebrow mb-2">{t("permissions")} · {user.role}</p>
+          <Row icon={ShieldCheck} title="Modules" sub={`${perms.length} modules`} />
           <div className="flex flex-wrap gap-2 mt-3">{perms.map((p) => <span key={p} className="text-xs font-semibold rounded-full bg-muted px-3 py-1">{p}</span>)}</div>
-          <p className="text-xs text-muted-foreground mt-6 leading-relaxed">Superadmin: full access. Bar Team: no financial report, cannot edit partners/menus. Rider: POS, Rider Dashboard, Settings only.</p>
+          {user.role === "superadmin" && <div className="mt-6 pt-4 border-t border-border/50">
+            <p className="eyebrow mb-2">{t("appsScript")} (Google Sheets + Drive)</p>
+            <div className="flex gap-2"><input data-testid="apps-script-url-input" className="field text-xs" placeholder="https://script.google.com/macros/s/.../exec" value={gsUrl} onChange={(e) => setGsUrl(e.target.value)} />
+              <button data-testid="apps-script-save" onClick={async () => { await api.put("/config", { apps_script_url: gsUrl }); toast.success(t("save") + " ✓"); }} className="btn-primary h-10 px-4 text-xs">{t("save")}</button></div>
+            <p className="text-[11px] text-muted-foreground mt-2">Tutorial: /app/google-apps-script/README.md</p></div>}
         </Bento>
       </div>
     </div>
