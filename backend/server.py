@@ -1188,7 +1188,7 @@ async def finance_summary(start: str, end: str, u=Depends(SUPER)):
         for name, qty in r["menu"].items():
             cogs += menu_cost_map.get(name, 0) * qty
     return {"income": income, "outgo": outgo, "net": income - outgo, "cash_balance": bal["cash"], "bank_balance": bal["bank"], "cogs": cogs,
-            "gross_profit": income - cogs, "handover_total": sum(h["amount"] for h in handovers), "ledger": list(reversed(ledger)),
+            "gross_profit": income - cogs, "handover_total": sum(h.get("received_cash", h.get("amount", 0)) for h in handovers), "ledger": list(reversed(ledger)),
             "by_category": [{"name": k, "amount": v} for k, v in cat.items()], "inventory_value": sum(m["stock"] / m["pack_qty"] * m["pack_price"] for m in mats.values() if m["pack_qty"])}
 
 

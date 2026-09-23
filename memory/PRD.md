@@ -28,6 +28,17 @@ Advanced coffee-cart business OS (POS, inventory w/ recipes, menu stock, rider s
 - Cash Handover, Financial Report (ledger w/ running cash/bank balance, COGS, gross/net profit, inventory value, manual expense/income), Salary (allowance Rp20k >20 cups/day, Bronze/Silver/Gold/Platinum with 25-day rule)
 - Profile, Settings (theme, EN/ID, notifications, GPS mode, permissions list), role-based nav + More hub
 
+## Revision 1 (2026-06) — implemented
+- Mobile-app UX: role-based bottom nav (superadmin 4 + "More" upward menu; barteam 6; rider 3), profile only top-right, desktop sidebar flat; Indonesian default language + expanded dictionary (receipts translated)
+- Rider Stock: photo mandatory, PIC auto, new WA report format with time; Deposit: PIC auto, price under name, EOD prefill (requires POS "End Today's Sales" close), Bundling 1/2 (4/10 cups of Rp12k menus → 45k/110k) with menu picker, commission Rp20k, receipt date+time, Web Share API with image
+- POS: locked without rider stock / after EOD close / after deposit; bundling buttons; customer lookup by 5-digit phone prefix; sales history table + receipt resend; client_id idempotency
+- Invoice: PAID/UNPAID, down payment, remaining payment (bold), pay endpoint, unpaid lookup by phone prefix
+- Cash Handover: period filter → expected cash from deposits, unlimited expense lines saved to expenses/finance, difference calc, history + detail dialog
+- Rider Dashboard: Total Income (20k×days + incentive), Daily Attendance + Incentive withdraw dialogs (cash/bank, balance check, history), line chart cash+qris, PDF/print
+- Salary: no 20-cup rule; click rider → dashboard. Finance: Excel/PDF/WA export, purchase item + material names, withdrawals in ledger
+- Inventory: recipes include packaging (migration), PDF Excel-style with time, purchased item/supplier on IN
+- Google Sheets/Drive sync via Apps Script (google-apps-script/Code.gs + README), URL configurable in Settings (superadmin) or GOOGLE_APPS_SCRIPT_URL env. NOT active until user deploys and pastes URL.
+
 ## Backlog / P1-P2
 - Google Drive photo storage (needs OAuth credentials) · Google Maps (needs API key)
 - V2: AI demand forecasting, Bluetooth thermal printing, WA auto-broadcast marketing

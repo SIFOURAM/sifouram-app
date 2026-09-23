@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="19" time="16.183" timestamp="2026-09-23T16:03:28.656330+00:00" hostname="agent-env-7e2ea440-5d0f-4173-9de1-54462be299bb"><testcase classname="tests.test_si4am_revision.TestRiderStockPhoto" name="test_no_photo_400" time="3.446" /><testcase classname="tests.test_si4am_revision.TestRiderStockPhoto" name="test_with_photo_returns_meta" time="0.134" /><testcase classname="tests.test_si4am_revision.TestBundleSales" name="test_bundle1_valid" time="0.486" /><testcase classname="tests.test_si4am_revision.TestBundleSales" name="test_bundle_wrong_component_count" time="0.260" /><testcase classname="tests.test_si4am_revision.TestBundleSales" name="test_bundle_non_12k_component" time="0.293" /><testcase classname="tests.test_si4am_revision.TestSalesLock" name="test_no_initial_stock_400" time="0.154" /><testcase classname="tests.test_si4am_revision.TestSalesLock" name="test_after_eod_close_blocks_sale" time="0.759" /><testcase classname="tests.test_si4am_revision.TestCustomerLookup" name="test_lookup_by_phone_prefix" time="0.434" /><testcase classname="tests.test_si4am_revision.TestCustomerLookup" name="test_lookup_unpaid_invoice" time="0.257" /><testcase classname="tests.test_si4am_revision.TestDepositBundles" name="test_deposit_with_bundles" time="0.454" /><testcase classname="tests.test_si4am_revision.TestInvoicesFlow" name="test_dp_less_than_total" time="0.481" /><testcase classname="tests.test_si4am_revision.TestHandover" name="test_expected_and_expenses" time="0.590"><failure message="requests.exceptions.JSONDecodeError: Expecting value: line 1 column 1 (char 0)">/root/.venv/lib/python3.11/site-packages/requests/models.py:1116: in json
+    return complexjson.loads(self.text, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/json/__init__.py:346: in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/json/decoder.py:337: in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/json/decoder.py:355: in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+E   json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+During handling of the above exception, another exception occurred:
+backend/tests/test_si4am_revision.py:281: in test_expected_and_expenses
+    params={"start": TDATE, "end": TDATE}).json()
+                                           ^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/models.py:1120: in json
+    raise RequestsJSONDecodeError(e.msg, e.doc, e.pos)
+E   requests.exceptions.JSONDecodeError: Expecting value: line 1 column 1 (char 0)</failure></testcase><testcase classname="tests.test_si4am_revision.TestSalaryWithdrawal" name="test_salary_fields_and_no_20cup_rule" time="0.126" /><testcase classname="tests.test_si4am_revision.TestSalaryWithdrawal" name="test_withdrawal_exceeds_balance" time="0.145" /><testcase classname="tests.test_si4am_revision.TestSalaryWithdrawal" name="test_withdrawal_valid_appears_in_ledger" time="0.585" /><testcase classname="tests.test_si4am_revision.TestPackagingRecipe" name="test_recipe_length_has_packaging" time="5.292" /><testcase classname="tests.test_si4am_revision.TestPackagingRecipe" name="test_produce_deducts_packaging" time="0.664" /><testcase classname="tests.test_si4am_revision.TestConfig" name="test_get_config" time="0.131" /><testcase classname="tests.test_si4am_revision.TestConfig" name="test_put_config_super_only" time="1.265" /></testsuite></testsuites>

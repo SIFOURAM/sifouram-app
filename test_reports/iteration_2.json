@@ -1,0 +1,46 @@
+{
+  "summary": "Iteration-2 revision testing. Backend: 18/19 pytest revision tests PASS (test_si4am_revision.py). Frontend Playwright mobile (390x844) all critical revision selectors pass: superadmin bottom nav (dashboard/riderStock/deposit/handover + more), more-menu with 8 items opens upward, nav-profile-button ONLY in header (absent from bottom nav), Indonesian default (Masuk, Dasbor, Setoran…), barteam bottom nav (menuStock/riderStock/deposit/inventory/riderDash/settings, no more-btn), rider bottom nav (pos/riderDash/settings), landing routes correct. Deposit page: deposit-pic readonly=alif's name, bundle-row-1/2, calc-net-cash, deposit-save-button OK. Rider Stock save-button disabled without photo, hidden rider-stock-photo input present. POS as ricky: pos-locked banner shown (rider is deposited today per seed). Invoice page has invoice-phone-input. Handover page has handover-add-expense, handover-diff. Rider dashboard (?rider=<id>) shows withdraw-allowance-button + incentive-card-button.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/finance/summary", "issue": "500 KeyError: 'amount' at server.py:1191 → sum(h['amount'] for h in handovers). New handover records use 'received_cash' (not 'amount'). Once any new handover exists in the range, the entire finance summary endpoint fails, breaking Finance page for superadmin. Reproducible: POST /api/handovers with new HandoverIn schema, then GET /api/finance/summary?start=...&end=... → 500.", "priority": "CRITICAL"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Invoice unpaid hint", "issue": "Typing first 5 chars of an existing unpaid-invoice phone in invoice-phone-input did NOT render [data-testid=unpaid-hint] within 1.2s. Backend /api/customers/lookup returns the unpaid_invoice correctly (verified in pytest test_lookup_unpaid_invoice). May be a debounce / state race; needs longer wait or effect trigger review. Non-blocking – re-verify with 3s wait.", "affected_selectors": ["[data-testid=\"unpaid-hint\"]"]},
+      {"flow": "Rider dashboard withdraw dialog", "issue": "Clicking withdraw-allowance-button did not open [data-testid=withdraw-dialog] in one automated run (possible Radix dialog + navigation race). The button+condition (single rider) render correctly. Manual retest advised.", "affected_selectors": ["[data-testid=\"withdraw-dialog\"]"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_si4am_revision.py",
+    "/app/backend/tests/test_si4am_backend.py",
+    "/app/test_reports/pytest/pytest_revision.xml"
+  ],
+  "action_items": [
+    "FIX finance_summary handover_total: server.py line 1191 → replace `sum(h['amount'] for h in handovers)` with `sum(h.get('received_cash', h.get('amount', 0)) for h in handovers)`. This unblocks /api/finance/summary once any new-schema handover exists.",
+    "Verify Invoice unpaid-hint renders (may need debounce/UseEffect check for phone length >= 5).",
+    "Confirm withdraw-dialog opens reliably on withdraw-allowance-button click (Radix dialog mount)."
+  ],
+  "critical_code_review_comments": [
+    "server.py still monolithic ~1235 lines — split into routers (auth/inventory/sales/deposits/finance).",
+    "finance_summary handover_total assumes legacy schema (`h['amount']`) after handover model migration to expected/received/expenses; silent breakage class of bug – add type-safe accessors on legacy fields or a migration script.",
+    "POST /withdrawals uses `start`/`end` as *query* params on a POST body endpoint (unusual). Consider putting the period in the body for clarity + easier client caching.",
+    "customers/lookup regex uses raw phone prefix without escaping — if UI passes special regex chars ('.', '+') it could throw. Use `re.escape` before building the pattern.",
+    "BundleIn.method not validated to be 'cash'|'qris'; invalid method silently drops into b_qris (else branch).",
+    "Handover expected_cash is trusted from client body — server should recompute from `handover_expected` to avoid tampering.",
+    "React duplicate-key warning (key='9') carried over from iteration_1 — still present."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_si4am_revision.py"
+  ],
+  "success_rate": {"backend": "18/19 revision tests pass (94.7%); 1 failure caused by pre-existing finance_summary bug", "frontend": "~95% – all 3 bottom-nav layouts, more-menu, profile placement, POS lock, Deposit page fields, rider-stock photo gate, invoice/handover/rider-dashboard testids present"},
+  "test_credentials": "Used baa/Nai130994, alif/Jkt221112, ricky/Jkt221112 (PIN 9620). See /app/memory/test_credentials.md.",
+  "seed_data_creation": "Test data created on TDATE=today-20…today-23 for riders fikar/rijal/si4am4/ricky (rider stock + sales + deposit + bundles + one paid invoice + one unpaid invoice with phone 0899UNPAID1 + expenses via handover). All prefixed TEST_ where possible.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run: `python -m pytest backend/tests/test_si4am_revision.py -o addopts='' -v`. Also legacy suite `test_si4am_backend.py` still valid. Finance summary bug: any new handover in range breaks GET /api/finance/summary. After main agent fix, rerun TestHandover::test_expected_and_expenses in revision file – it already asserts Handover Expense appears in the ledger. Frontend Playwright uses `si4am_token` in localStorage (see /app/frontend/src/lib/api.js). Rider stock write requires photo (base64 data URL) on first-ever save for that (rider,date) pair.",
+  "rca of the issue": "GET /api/finance/summary crashes with KeyError('amount') because the new HandoverIn model (revision) no longer stores a scalar `amount`; handover docs now carry `expected_cash`, `received_cash`, `expenses[]`. Line 1191 still reads `h['amount']`. Fix: use `h.get('received_cash', h.get('amount', 0))` (or migrate stored docs to add an `amount` alias). All other iteration-2 revision features (bundles in POS + deposits, EOD lock, customer lookup by 5-digit phone incl. unpaid_invoice, invoice DP+pay+idempotency, packaging in menu recipes + produce deduction, withdrawal balance guard, salary allowance = allowance_days×20000, apps_script config) work as specified."
+}
