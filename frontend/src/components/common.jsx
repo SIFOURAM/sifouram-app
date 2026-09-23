@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { Camera, Download, MessageCircle, X } from "lucide-react";
+import { Camera, Download, MessageCircle, X, Printer } from "lucide-react";
+import { toast } from "sonner";
 import { Dialog, DialogContent } from "./ui/dialog";
-import { compressImage, rangeFor, screenshotEl, shareReceipt } from "../lib/helpers";
+import { compressImage, rangeFor, screenshotEl, shareReceipt, printBluetooth } from "../lib/helpers";
 import { useT } from "../lib/i18n";
 
 export const PageHeader = ({ eyebrow, title, children }) => (
@@ -44,7 +45,7 @@ export const Select = ({ value, onChange, options, testId, className = "", place
 );
 
 export const QtySelect = ({ value, onChange, max = 30, testId, className = "" }) => (
-  <select data-testid={testId} value={value} onChange={(e) => onChange(Number(e.target.value))} className={`field w-20 h-9 px-2 num ${className}`}>
+  <select data-testid={testId} value={value} onChange={(e) => onChange(Number(e.target.value))} className={`qty ${className}`}>
     {Array.from({ length: max + 1 }, (_, i) => <option key={i} value={i}>{i}</option>)}
   </select>
 );
@@ -113,6 +114,7 @@ export function ReceiptModal({ open, onClose, title, waText, waPhone, filename =
           </div>
           <div className="flex gap-2 mt-4">
             <button data-testid="receipt-download" onClick={() => screenshotEl(ref.current, filename)} className="btn-ghost flex-1"><Download className="w-4 h-4" />PNG</button>
+            {navigator.bluetooth && waText && <button data-testid="receipt-print-bt" onClick={() => printBluetooth(waText).catch((e) => toast.error(String(e.message || e)))} className="btn-ghost flex-1"><Printer className="w-4 h-4" />Print</button>}
             {waText && <button data-testid="receipt-whatsapp" onClick={() => shareReceipt(ref.current, waText, filename, waPhone)} className="btn-wa flex-1"><MessageCircle className="w-4 h-4" />WhatsApp</button>}
           </div>
         </div>

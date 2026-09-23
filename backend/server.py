@@ -1221,6 +1221,34 @@ async def put_config(body: ConfigIn, u=Depends(SUPER)):
     return {"apps_script_url": body.apps_script_url.strip()}
 
 
+HOLIDAYS_ID = {"2026-01-01", "2026-01-16", "2026-02-17", "2026-03-19", "2026-03-20", "2026-03-21", "2026-04-03", "2026-05-01", "2026-05-14", "2026-05-27", "2026-05-31", "2026-06-01", "2026-06-16", "2026-08-17", "2026-12-25"}
+
+
+@api.get("/forecast")
+async def forecast(rider_id: str, date: str, u=Depends(ANY)):
+    """Suggest tomorrow's initial stock per menu from sales history (same weekday + recent trend + holiday uplift)."""
+    target = datetime.strptime(date, "%Y-%m-%d")
+    start = (target - timedelta(days=56)).strftime("%Y-%m-%d")
+    recs = await daily_summaries(start, (target - timedelta(days=1)).strftime("%Y-%m-%d"), rider_id)
+    menus = await db.menus.find({"active": {"$ne": False}}, NOID).sort("order", 1).to_list(100)
+    same_wd = [r for r in recs if datetime.strptime(r["date"], "%Y-%m-%d").weekday() == target.weekday()]
+    recent = [r for r in recs if r["date"] >= (target - timedelta(days=14)).strftime("%Y-%m-%d")]
+    factor = 1.2 if (date in HOLIDAYS_ID or target.weekday() >= 5) else 1.0
+    out, basis = [], "history"
+    for m in menus:
+        a = [r["menu"].get(m["name"], 0) for r in same_wd]
+        b = [r["menu"].get(m["name"], 0) for r in recent]
+        avg_a = sum(a) / len(a) if a else 0
+        avg_b = sum(b) / len(b) if b else 0
+        base = 0.6 * avg_a + 0.4 * avg_b if (a or b) else 0
+        if not (a or b):
+            basis = "default"
+            base = 10 if m["price"] == 12000 else 8
+        sug = min(m["max_stock"], max(3, int(round(base * factor * 1.1 + 0.5))))
+        out.append({"menu_id": m["id"], "name": m["name"], "suggested": sug, "avg_same_weekday": round(avg_a, 1), "avg_recent": round(avg_b, 1)})
+    return {"date": date, "rider_id": rider_id, "factor": factor, "holiday": date in HOLIDAYS_ID, "weekend": target.weekday() >= 5, "basis": basis, "days_of_history": len(recs), "items": out, "total": sum(i["suggested"] for i in out)}
+
+
 @api.get("/")
 async def root():
     return {"app": "SI FOUR AM", "status": "ok"}

@@ -80,11 +80,11 @@ export default function Finance() {
             {d.by_category.length ? <><ResponsiveContainer width="100%" height={160}><PieChart><Pie data={d.by_category} dataKey="amount" nameKey="name" innerRadius={45} outerRadius={70} paddingAngle={3}>{d.by_category.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Pie><Tooltip formatter={(v) => fmtRp(v)} contentStyle={{ borderRadius: 12, fontSize: 12 }} /></PieChart></ResponsiveContainer>
               <ul className="text-xs space-y-1">{d.by_category.map((c, i) => <li key={c.name} className="flex justify-between"><span className="flex items-center gap-2"><span className="w-2 h-2 rounded-full" style={{ background: COLORS[i % COLORS.length] }} />{c.name}</span><b className="num">{fmtRp(c.amount)}</b></li>)}</ul></> : <Empty text={t("noData")} />}
           </Bento>
-          <Bento className="col-span-2 fade-up overflow-x-auto max-h-[560px] overflow-y-auto" testId="ledger">
+          <Bento className="col-span-2 fade-up max-h-[560px] overflow-y-auto" testId="ledger">
             <p className="eyebrow mb-4">Cash / bank ledger · running balance</p>
-            <table className="table-x"><thead><tr><th>Date</th><th>Category</th><th>Acct</th><th className="text-right">Amount</th><th className="text-right">Cash bal.</th><th className="text-right">Bank bal.</th><th /></tr></thead>
-              <tbody>{d.ledger.map((l, i) => <tr key={i}><td className="num text-xs">{l.date}</td><td><span className="font-semibold text-xs">{l.category}</span><span className="block text-[10px] text-muted-foreground">{l.desc}</span></td><td className="text-[10px] uppercase">{l.account}</td>
-                <td className={`num text-right font-semibold ${l.type === "in" ? "text-emerald-500" : "text-red-500"}`}>{l.type === "in" ? "+" : "−"}{fmtRp(l.amount)}</td><td className="num text-right text-xs">{fmtRp(l.balance_cash)}</td><td className="num text-right text-xs">{fmtRp(l.balance_bank)}</td>
+            <table className="table-x"><thead><tr><th>{t("date")}</th><th>{t("category")}</th><th className="hide-sm">Acct</th><th className="text-right">{t("amount")}</th><th className="text-right hide-sm">Cash</th><th className="text-right hide-sm">Bank</th><th /></tr></thead>
+              <tbody>{d.ledger.map((l, i) => <tr key={i}><td className="num text-xs">{l.date}</td><td><span className="font-semibold text-xs">{l.category}</span><span className="block text-[10px] text-muted-foreground">{l.desc}</span></td><td className="text-[10px] uppercase hide-sm">{l.account}</td>
+                <td className={`num text-right font-semibold ${l.type === "in" ? "text-emerald-500" : "text-red-500"}`}>{l.type === "in" ? "+" : "−"}{fmtRp(l.amount)}</td><td className="num text-right text-xs hide-sm">{fmtRp(l.balance_cash)}</td><td className="num text-right text-xs hide-sm">{fmtRp(l.balance_bank)}</td>
                 <td>{l.id && <button data-testid={`ledger-delete-${l.id}`} onClick={() => del(l.id)} className="text-muted-foreground hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>}</td></tr>)}</tbody></table>
             {!d.ledger.length && <Empty text={t("noData")} />}
           </Bento>

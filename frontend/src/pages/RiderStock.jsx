@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { Sparkles } from "lucide-react";
 import { api, errMsg } from "../lib/api";
 import { today, shareReceipt, fmtDate } from "../lib/helpers";
 import { useT } from "../lib/i18n";
@@ -7,9 +8,10 @@ import { useAuth } from "../context/AuthContext";
 import { PageHeader, Bento, Field, Select, QtySelect, PhotoCapture, Empty } from "../components/common";
 
 export default function RiderStock() {
-  const { t } = useT();
+  const { t, lang } = useT();
   const { user } = useAuth();
   const [busy, setBusy] = useState(false);
+  const [fc, setFc] = useState(null);
   const [riders, setRiders] = useState([]);
   const [menus, setMenus] = useState([]);
   const [riderId, setRiderId] = useState("");
@@ -53,11 +55,14 @@ export default function RiderStock() {
             <Field label={t("selectRider")}><Select testId="rider-stock-rider-select" value={riderId} onChange={setRiderId} placeholder="—" options={riders.map((r) => ({ value: r.id, label: r.name }))} /></Field>
             <Field label={t("date")}><input data-testid="rider-stock-date-input" type="date" className="field" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
           </div>
-          <table className="table-x"><thead><tr><th>#</th><th>Menu</th><th className="text-right">{t("qty")}</th></tr></thead>
+          <div className="flex items-center justify-between mb-2"><p className="eyebrow">{t("menu")}</p>
+            <button data-testid="forecast-button" disabled={!riderId} onClick={async () => { const { data } = await api.get("/forecast", { params: { rider_id: riderId, date } }); const nx = {}; data.items.forEach((i) => { nx[i.menu_id] = i.suggested; }); setItems(nx); setFc(data); toast.success(`🤖 ${data.total} cups · ${data.basis === "default" ? (lang === "id" ? "belum ada riwayat, pakai default" : "no history, defaults") : `${data.days_of_history} ${lang === "id" ? "hari riwayat" : "days history"}`}${data.factor > 1 ? " · +20% weekend/libur" : ""}`); }} className="btn-ghost h-8 px-3 text-xs"><Sparkles className="w-3 h-3 text-primary" />{lang === "id" ? "Prediksi AI" : "AI Forecast"}</button></div>
+          {fc && <p className="text-[11px] text-muted-foreground mb-2" data-testid="forecast-info">{lang === "id" ? "Saran berdasarkan rata-rata hari yang sama (60%) + 14 hari terakhir (40%), buffer 10%" : "Suggestion = same weekday avg (60%) + last 14 days (40%), +10% buffer"}{fc.holiday ? " · 🎉 libur nasional" : fc.weekend ? " · weekend" : ""}</p>}
+          <table className="table-x"><thead><tr><th>#</th><th>{t("menu")}</th>{fc && <th className="hide-xs">AI</th>}<th className="text-right">{t("qty")}</th></tr></thead>
             <tbody>{menus.map((m) => (
-              <tr key={m.id}><td className="num text-muted-foreground">{m.order}</td><td className="font-semibold">{m.name}<span className="block text-[10px] text-muted-foreground">central stock {m.stock}</span></td>
+              <tr key={m.id}><td className="num text-muted-foreground">{m.order}</td><td className="font-semibold">{m.name}<span className="block text-[10px] text-muted-foreground">{t("stock")} {m.stock}</span></td>{fc && <td className="num text-xs text-primary hide-xs">{fc.items.find((i) => i.menu_id === m.id)?.suggested}</td>}
                 <td className="text-right"><QtySelect testId={`rider-stock-qty-${m.id}`} max={m.max_stock} value={items[m.id] || 0} onChange={(v) => setItems({ ...items, [m.id]: v })} /></td></tr>))}</tbody>
-            <tfoot><tr><td /><td className="font-bold">{t("total")}</td><td data-testid="rider-stock-total" className="text-right font-bold num text-xl text-primary">{total}</td></tr></tfoot></table>
+            <tfoot><tr><td /><td className="font-bold">{t("total")}</td>{fc && <td className="hide-xs" />}<td data-testid="rider-stock-total" className="text-right font-bold num text-xl text-primary">{total}</td></tr></tfoot></table>
         </Bento>
         <div className="space-y-6">
           <Bento className="fade-up" testId="rider-stock-photo-card">

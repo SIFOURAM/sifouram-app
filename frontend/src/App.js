@@ -18,6 +18,7 @@ import Finance from "./pages/Finance";
 import Salary from "./pages/Salary";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
+import Customers from "./pages/Customers";
 
 const S = ["superadmin"], SB = ["superadmin", "barteam"], ALL = ["superadmin", "barteam", "rider"];
 
@@ -51,6 +52,7 @@ function Shell() {
         <Route path="/handover" element={<Guard allow={S}><Handover /></Guard>} />
         <Route path="/finance" element={<Guard allow={S}><Finance /></Guard>} />
         <Route path="/salary" element={<Guard allow={SB}><Salary /></Guard>} />
+        <Route path="/customers" element={<Guard allow={SB}><Customers /></Guard>} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />

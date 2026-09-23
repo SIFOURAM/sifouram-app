@@ -115,17 +115,18 @@ export default function DepositPage() {
         </div>
         {riderId && eod && <div data-testid="eod-status" className={`rounded-xl p-3 text-xs mb-4 ${eod.closed ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-500"}`}>
           {eod.closed ? `✓ ${t("eodDone")} — ${eod.transactions} ${t("transactions")}, ${eod.total_cups} cups (${t("cash")} ${fmtRp(eod.total_cash)}, QRIS ${fmtRp(eod.total_qris)})` : (L ? "Rider belum menutup penjualan di POS — data penjualan tidak diambil otomatis." : "Rider has not ended today's sales in POS — sales data not auto-filled.")}</div>}
-        <div className="overflow-x-auto -mx-5 px-5">
-          <table className="table-x min-w-[720px]"><thead><tr><th>{t("menu")}</th><th>{t("stock")}</th><th>{t("remaining")}</th><th>{t("cash")}</th><th>{t("qris")}</th><th>{t("wastage")}</th><th>{t("sold")}</th><th>{t("diff")}</th></tr></thead>
+        <div>
+          <table className="table-x"><thead><tr><th>{t("menu")}</th><th>{t("stock")}</th><th>{t("remaining")}</th><th>{t("cash")}</th><th>{t("qris")}</th><th>{t("wastage")}</th><th className="hide-xs">{t("sold")}</th><th className="hide-xs">{t("diff")}</th></tr></thead>
             <tbody>{calc.lines.map((l) => (
-              <tr key={l.id} data-testid={`deposit-row-${l.id}`}><td className="whitespace-nowrap"><p className="font-semibold text-sm">{l.name}</p><p className="text-[11px] text-muted-foreground num">{fmtRp(l.price)}</p></td>
-                {["stock", "remaining", "cash", "qris", "wastage"].map((k) => <td key={k}><QtySelect testId={`deposit-${k}-${l.id}`} max={l.max_stock} value={l[k]} onChange={(v) => setCell(l.id, k, v)} />{(k === "cash" && l.b.cash > 0) && <span className="block text-[10px] text-primary">+{l.b.cash} bdl</span>}{(k === "qris" && l.b.qris > 0) && <span className="block text-[10px] text-primary">+{l.b.qris} bdl</span>}</td>)}
-                <td className="num font-bold">{l.sold}</td><td className={`num font-bold ${l.diff > 0 ? "text-red-500" : l.diff < 0 ? "text-amber-500" : "text-emerald-500"}`}>{l.diff}{l.diff > 0 && <span className="block text-[10px]">{fmtRp(l.diff * l.price)}</span>}</td></tr>))}
+              <tr key={l.id} data-testid={`deposit-row-${l.id}`}><td><p className="font-semibold text-sm leading-tight">{l.name.replace("SI ", "")}</p><p className="text-[10px] text-muted-foreground num">{fmtRp(l.price)}</p>
+                <p className="sm:hidden text-[10px] num"><span className="font-bold">{l.sold}</span> {t("sold").toLowerCase()} · <span className={`font-bold ${l.diff > 0 ? "text-red-500" : l.diff < 0 ? "text-amber-500" : "text-emerald-500"}`}>{l.diff}</span></p></td>
+                {["stock", "remaining", "cash", "qris", "wastage"].map((k) => <td key={k}><QtySelect testId={`deposit-${k}-${l.id}`} max={l.max_stock} value={l[k]} onChange={(v) => setCell(l.id, k, v)} />{(k === "cash" && l.b.cash > 0) && <span className="block text-[9px] text-primary">+{l.b.cash}</span>}{(k === "qris" && l.b.qris > 0) && <span className="block text-[9px] text-primary">+{l.b.qris}</span>}</td>)}
+                <td className="num font-bold hide-xs">{l.sold}</td><td className={`num font-bold hide-xs ${l.diff > 0 ? "text-red-500" : l.diff < 0 ? "text-amber-500" : "text-emerald-500"}`}>{l.diff}{l.diff > 0 && <span className="block text-[10px]">{fmtRp(l.diff * l.price)}</span>}</td></tr>))}
               {[1, 2].map((b) => (
-                <tr key={b} className="bg-primary/5" data-testid={`bundle-row-${b}`}><td className="whitespace-nowrap"><p className="font-semibold text-sm text-primary">BUNDLING {b}</p><p className="text-[11px] text-muted-foreground num">{BUNDLES[b].cups} {t("cups")} · {fmtRp(BUNDLES[b].price)}</p></td><td /><td />
+                <tr key={b} className="bg-primary/5" data-testid={`bundle-row-${b}`}><td><p className="font-semibold text-sm text-primary leading-tight">BUNDLING {b}</p><p className="text-[10px] text-muted-foreground num">{BUNDLES[b].cups} cup · {fmtRp(BUNDLES[b].price)}</p></td><td /><td />
                   {["cash", "qris"].map((m) => { const k = `${b}-${m}`; const v = bundles[k] || { qty: 0, items: {} }; const ok = !v.qty || Object.values(v.items).reduce((a, x) => a + x, 0) === BUNDLES[b].cups * v.qty;
                     return <td key={m}><QtySelect testId={`bundle-${k}`} max={20} value={v.qty} onChange={(q) => setBundleQty(k, q)} />{v.qty > 0 && <button data-testid={`bundle-edit-${k}`} onClick={() => setEditB({ key: k, value: v })} className={`block text-[10px] font-semibold ${ok ? "text-emerald-500" : "text-red-500"}`}>{ok ? "✓ menu" : "! " + t("selectMenus")}</button>}</td>; })}
-                  <td /><td /><td /></tr>))}
+                  <td /><td className="hide-xs" /><td className="hide-xs" /></tr>))}
             </tbody></table>
         </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-6">
@@ -143,10 +144,10 @@ export default function DepositPage() {
         </div>
       </Bento>
 
-      <Bento className="mt-6 overflow-x-auto" testId="deposit-list">
+      <Bento className="mt-6" testId="deposit-list">
         <p className="eyebrow mb-3">{t("history")}</p>
-        <table className="table-x"><thead><tr><th>{t("date")}</th><th>{t("rider")}</th><th>{t("pic")}</th><th>Cups</th><th>{t("cash")}</th><th>{t("qris")}</th><th>Net</th></tr></thead>
-          <tbody>{list.map((d) => <tr key={d.id} className="cursor-pointer hover:bg-muted/40" onClick={() => setResult(d)}><td className="num text-xs">{d.date} {d.time || ""}</td><td>{d.rider_name}</td><td className="text-xs">{d.pic_name}</td><td className="num">{d.total_cups}</td><td className="num">{fmtRp(d.total_cash)}</td><td className="num">{fmtRp(d.total_qris)}</td><td className="num font-bold">{fmtRp(d.net_cash)}</td></tr>)}</tbody></table>
+        <table className="table-x"><thead><tr><th>{t("date")}</th><th>{t("rider")}</th><th className="hide-sm">{t("pic")}</th><th>Cups</th><th className="hide-xs">{t("cash")}</th><th className="hide-xs">{t("qris")}</th><th>Net</th></tr></thead>
+          <tbody>{list.map((d) => <tr key={d.id} className="cursor-pointer hover:bg-muted/40" onClick={() => setResult(d)}><td className="num text-xs">{d.date}<span className="hide-sm"> {d.time || ""}</span></td><td>{d.rider_name}</td><td className="text-xs hide-sm">{d.pic_name}</td><td className="num">{d.total_cups}</td><td className="num hide-xs">{fmtRp(d.total_cash)}</td><td className="num hide-xs">{fmtRp(d.total_qris)}</td><td className="num font-bold">{fmtRp(d.net_cash)}</td></tr>)}</tbody></table>
         {!list.length && <Empty text={t("noData")} />}
       </Bento>
 

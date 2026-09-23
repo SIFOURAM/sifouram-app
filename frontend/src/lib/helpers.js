@@ -58,6 +58,24 @@ export const shareReceipt = async (el, text, filename, phone) => {
 
 export const nowTime = () => new Date().toLocaleTimeString("id-ID", { hour12: false }).replace(/\./g, ":");
 
+// Web Bluetooth ESC/POS thermal printing (58mm). Works on Chrome Android/desktop with BLE printers.
+let btChar = null;
+export const printBluetooth = async (text) => {
+  if (!navigator.bluetooth) throw new Error("Web Bluetooth tidak didukung di browser ini");
+  if (!btChar) {
+    const dev = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: ["000018f0-0000-1000-8000-00805f9b34fb", "e7810a71-73ae-499d-8c15-faa9aef0c3f2", "49535343-fe7d-4ae5-8fa9-9fafd205e455"] });
+    const server = await dev.gatt.connect();
+    const services = await server.getPrimaryServices();
+    for (const s of services) { const chars = await s.getCharacteristics(); const c = chars.find((x) => x.properties.write || x.properties.writeWithoutResponse); if (c) { btChar = c; break; } }
+    if (!btChar) throw new Error("Printer tidak ditemukan");
+    dev.addEventListener("gattserverdisconnected", () => { btChar = null; });
+  }
+  const clean = text.replace(/\*/g, "").replace(/[^\x00-\x7F\n]/g, "");
+  const enc = new TextEncoder();
+  const bytes = new Uint8Array([0x1b, 0x40, 0x1b, 0x61, 0x00, ...enc.encode(clean + "\n\n\n\n"), 0x1d, 0x56, 0x00]);
+  for (let i = 0; i < bytes.length; i += 100) await btChar.writeValue(bytes.slice(i, i + 100));
+};
+
 export const compressImage = (file, max = 640) =>
   new Promise((resolve) => {
     const img = new Image();

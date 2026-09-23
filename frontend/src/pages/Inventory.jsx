@@ -79,13 +79,13 @@ export default function Inventory() {
             </form>
             <button data-testid="new-material-button" onClick={() => setNewMat({ name: "", unit: "g", pack_qty: "", pack_price: "", pack_label: "pack", category: "raw" })} className="btn-ghost w-full mt-3"><Plus className="w-4 h-4" />New material</button>
           </Bento>
-          <Bento className="lg:col-span-2 fade-up overflow-x-auto" testId="inventory-table">
-            <p className="eyebrow mb-4">Remaining Inventory</p>
-            <table className="table-x"><thead><tr><th>Material</th><th>Stock</th><th>Packs</th><th>Pack</th><th>Status</th></tr></thead>
+          <Bento className="lg:col-span-2 fade-up" testId="inventory-table">
+            <p className="eyebrow mb-4">{t("stock")}</p>
+            <table className="table-x"><thead><tr><th>{t("material")}</th><th>{t("stock")}</th><th className="hide-xs">Packs</th><th className="hide-sm">Pack</th><th>{t("status")}</th></tr></thead>
               <tbody>{mats.map((m) => (
                 <tr key={m.id} data-testid={`material-row-${m.id}`}><td className="font-semibold">{m.name}<span className="block text-[10px] text-muted-foreground uppercase">{m.category}</span></td>
-                  <td className="num">{Math.round(m.stock).toLocaleString()} {m.unit}</td><td className="num">{packs(m)} {m.pack_label}</td>
-                  <td className="num text-muted-foreground">{m.pack_qty.toLocaleString()} {m.unit} · {fmtRp(m.pack_price)}</td>
+                  <td className="num">{Math.round(m.stock).toLocaleString()} {m.unit}</td><td className="num hide-xs">{packs(m)} {m.pack_label}</td>
+                  <td className="num text-muted-foreground hide-sm">{m.pack_qty.toLocaleString()} {m.unit} · {fmtRp(m.pack_price)}</td>
                   <td>{m.stock <= m.min_stock ? <span className="text-xs font-semibold text-red-500">{t("lowStock")}</span> : <span className="text-xs text-emerald-500">OK</span>}</td></tr>))}</tbody></table>
           </Bento>
         </div>
@@ -104,10 +104,10 @@ export default function Inventory() {
       )}
 
       {tab === "history" && (
-        <Bento className="overflow-x-auto" testId="inventory-history">
-          <table className="table-x"><thead><tr><th>{t("date")}</th><th>{t("material")}</th><th>{t("type")}</th><th>{t("qty")}</th><th>After</th><th>Cost</th><th>Item</th><th>{t("note")}</th><th>By</th></tr></thead>
+        <Bento testId="inventory-history">
+          <table className="table-x"><thead><tr><th>{t("date")}</th><th>{t("material")}</th><th>{t("type")}</th><th>{t("qty")}</th><th className="hide-sm">After</th><th className="hide-xs">Cost</th><th className="hide-sm">Item</th><th className="hide-sm">{t("note")}</th><th className="hide-sm">By</th></tr></thead>
             <tbody>{tx.map((x) => <tr key={x.id}><td className="num text-xs">{x.date} {x.time || ""}</td><td>{x.material_name}</td><td><span className={`text-xs font-bold uppercase ${x.type === "in" ? "text-emerald-500" : x.type === "out" ? "text-red-500" : "text-amber-500"}`}>{x.type}</span></td>
-              <td className="num">{x.qty} {x.unit}</td><td className="num">{Math.round(x.after)}</td><td className="num">{x.cost ? fmtRp(x.cost) : "-"}</td><td className="text-xs">{x.item_name}{x.supplier ? ` · ${x.supplier}` : ""}</td><td className="text-muted-foreground text-xs">{x.note}</td><td className="text-xs">{x.user}</td></tr>)}</tbody></table>
+              <td className="num">{x.qty} {x.unit}</td><td className="num hide-sm">{Math.round(x.after)}</td><td className="num hide-xs">{x.cost ? fmtRp(x.cost) : "-"}</td><td className="text-xs hide-sm">{x.item_name}{x.supplier ? ` · ${x.supplier}` : ""}</td><td className="text-muted-foreground text-xs hide-sm">{x.note}</td><td className="text-xs hide-sm">{x.user}</td></tr>)}</tbody></table>
         </Bento>
       )}
 

@@ -1,18 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
-import { LayoutDashboard, Boxes, Layers, ShoppingCart, Bike, Wallet, FileText, HandCoins, LineChart, BadgeDollarSign, Settings as Cog, MoreHorizontal, LogOut, Sun, Moon, Gauge } from "lucide-react";
+import { LayoutDashboard, Boxes, Layers, ShoppingCart, Bike, Wallet, FileText, HandCoins, LineChart, BadgeDollarSign, Settings as Cog, MoreHorizontal, LogOut, Sun, Moon, Gauge, Users } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useT } from "../lib/i18n";
 import { api } from "../lib/api";
 import { initials } from "../lib/helpers";
 
-const I = { dashboard: LayoutDashboard, inventory: Boxes, menuStock: Layers, pos: ShoppingCart, riderStock: Bike, deposit: Wallet, invoice: FileText, riderDash: Gauge, handover: HandCoins, finance: LineChart, salary: BadgeDollarSign, settings: Cog };
+const I = { dashboard: LayoutDashboard, inventory: Boxes, menuStock: Layers, pos: ShoppingCart, riderStock: Bike, deposit: Wallet, invoice: FileText, riderDash: Gauge, handover: HandCoins, finance: LineChart, salary: BadgeDollarSign, settings: Cog, customers: Users };
 const item = (to, key) => ({ to, key, icon: I[key] });
 
 // Bottom nav (mobile) + "More" sub-tabs. Desktop sidebar shows main + more flat.
 export const NAV = {
   superadmin: { main: [item("/", "dashboard"), item("/rider-stock", "riderStock"), item("/deposit", "deposit"), item("/handover", "handover")],
-    more: [item("/inventory", "inventory"), item("/menu-stock", "menuStock"), item("/pos", "pos"), item("/invoice", "invoice"), item("/rider-dashboard", "riderDash"), item("/finance", "finance"), item("/salary", "salary"), item("/settings", "settings")] },
+    more: [item("/inventory", "inventory"), item("/menu-stock", "menuStock"), item("/pos", "pos"), item("/invoice", "invoice"), item("/rider-dashboard", "riderDash"), item("/finance", "finance"), item("/salary", "salary"), item("/customers", "customers"), item("/settings", "settings")] },
   barteam: { main: [item("/menu-stock", "menuStock"), item("/rider-stock", "riderStock"), item("/deposit", "deposit"), item("/inventory", "inventory"), item("/rider-dashboard", "riderDash"), item("/settings", "settings")], more: [] },
   rider: { main: [item("/pos", "pos"), item("/rider-dashboard", "riderDash"), item("/settings", "settings")], more: [] },
 };
