@@ -1,0 +1,965 @@
+from dotenv import load_dotenv
+from pathlib import Path
+ROOT_DIR = Path(__file__).parent
+load_dotenv(ROOT_DIR / '.env')
+
+import os, uuid, logging, bcrypt, jwt
+from datetime import datetime, timezone, timedelta
+from typing import Optional, List, Dict, Any
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request
+from starlette.middleware.cors import CORSMiddleware
+from motor.motor_asyncio import AsyncIOMotorClient
+from pydantic import BaseModel
+from seed import SEED_USERS, SEED_MATERIALS, SEED_MENUS, MENU_PHOTOS
+
+client = AsyncIOMotorClient(os.environ['MONGO_URL'])
+db = client[os.environ['DB_NAME']]
+app = FastAPI(title="SI FOUR AM API")
+api = APIRouter(prefix="/api")
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("si4am")
+JWT_ALG = "HS256"
+NOID = {"_id": 0}
+
+
+def now_iso():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def uid():
+    return str(uuid.uuid4())
+
+
+def hash_pw(p: str) -> str:
+    return bcrypt.hashpw(p.encode(), bcrypt.gensalt()).decode()
+
+
+def check_pw(p: str, h: str) -> bool:
+    try:
+        return bcrypt.checkpw(p.encode(), h.encode())
+    except Exception:
+        return False
+
+
+def make_token(user_id: str, days: int) -> str:
+    return jwt.encode({"sub": user_id, "exp": datetime.now(timezone.utc) + timedelta(days=days), "type": "access"}, os.environ["JWT_SECRET"], algorithm=JWT_ALG)
+
+
+def public_user(u: dict) -> dict:
+    return {k: v for k, v in u.items() if k not in ("_id", "password_hash", "pin_hash")}
+
+
+async def get_user(request: Request) -> dict:
+    token = None
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        token = auth[7:]
+    if not token:
+        token = request.cookies.get("access_token")
+    if not token:
+        raise HTTPException(401, "Not authenticated")
+    try:
+        payload = jwt.decode(token, os.environ["JWT_SECRET"], algorithms=[JWT_ALG])
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(401, "Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(401, "Invalid token")
+    u = await db.users.find_one({"id": payload["sub"]})
+    if not u:
+        raise HTTPException(401, "User not found")
+    return u
+
+
+def roles(*allowed):
+    async def dep(u: dict = Depends(get_user)):
+        if u["role"] not in allowed:
+            raise HTTPException(403, "Forbidden for role " + u["role"])
+        return u
+    return dep
+
+
+STAFF = roles("superadmin", "barteam")
+SUPER = roles("superadmin")
+ANY = get_user
+
+
+# ---------- Models ----------
+class LoginIn(BaseModel):
+    identifier: str
+    password: str
+    remember: bool = False
+
+
+class PinIn(BaseModel):
+    pin: str
+
+
+class ProfileIn(BaseModel):
+    name: Optional[str] = None
+    whatsapp: Optional[str] = None
+    email: Optional[str] = None
+    photo: Optional[str] = None
+    joined_at: Optional[str] = None
+    placement: Optional[str] = None
+
+
+class PasswordIn(BaseModel):
+    old_password: str
+    new_password: str
+
+
+class PinChangeIn(BaseModel):
+    password: str
+    new_pin: str
+
+
+class MaterialIn(BaseModel):
+    name: str
+    unit: str
+    pack_qty: float
+    pack_price: float
+    pack_label: str = "pack"
+    category: str = "raw"
+    min_stock: float = 0
+
+
+class InvTxIn(BaseModel):
+    material_id: str
+    type: str  # in | out | opname
+    qty: float
+    note: str = ""
+    date: str
+
+
+class RecipeItem(BaseModel):
+    material_id: str
+    qty: float
+
+
+class MenuIn(BaseModel):
+    name: str
+    price: float
+    max_stock: int = 30
+    photo: Optional[str] = None
+    recipe: List[RecipeItem] = []
+    order: Optional[int] = None
+
+
+class ProduceIn(BaseModel):
+    menu_id: str
+    qty: int
+    date: str
+    type: str = "produce"  # produce | adjust
+    note: str = ""
+
+
+class AttendanceIn(BaseModel):
+    rider_id: str
+    pin: str
+    photo: str
+    date: str
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+
+
+class RiderStockIn(BaseModel):
+    rider_id: str
+    date: str
+    items: Dict[str, int]
+    photo: Optional[str] = None
+
+
+class SaleItem(BaseModel):
+    menu_id: str
+    qty: int
+
+
+class SaleIn(BaseModel):
+    rider_id: str
+    date: str
+    customer_name: str = ""
+    customer_phone: str = ""
+    items: List[SaleItem]
+    payment_method: str = "cash"
+    cash_received: float = 0
+
+
+class DepositRow(BaseModel):
+    menu_id: str
+    stock: int
+    remaining: int
+    cash: int
+    qris: int
+    wastage: int
+
+
+class DepositIn(BaseModel):
+    rider_id: str
+    date: str
+    pic_id: Optional[str] = None
+    rows: List[DepositRow]
+    debt_payment: float = 0
+    expenses: float = 0
+    expense_note: str = ""
+
+
+class InvoiceRow(BaseModel):
+    menu_id: str
+    qty: int
+    price: Optional[float] = None
+
+
+class InvoiceIn(BaseModel):
+    customer_name: str
+    customer_phone: str
+    date: str
+    rows: List[InvoiceRow]
+    payment_method: str = "cash"
+    discount: float = 0
+    note: str = ""
+
+
+class ExpenseIn(BaseModel):
+    date: str
+    category: str
+    amount: float
+    note: str = ""
+    account: str = "cash"
+    type: str = "expense"  # expense | income
+
+
+class HandoverIn(BaseModel):
+    date: str
+    giver_id: str
+    receiver_id: str
+    amount: float
+    note: str = ""
+
+
+class GpsIn(BaseModel):
+    lat: float
+    lng: float
+
+
+class SettingsIn(BaseModel):
+    theme: Optional[str] = None
+    language: Optional[str] = None
+    notifications: Optional[bool] = None
+    gps_mode: Optional[str] = None
+
+
+# ---------- Seeding ----------
+async def seed():
+    await db.users.create_index("username", unique=True)
+    await db.users.create_index("id", unique=True)
+    await db.attendance.create_index([("rider_id", 1), ("date", 1)], unique=True)
+    await db.rider_stock.create_index([("rider_id", 1), ("date", 1)], unique=True)
+    await db.deposits.create_index([("rider_id", 1), ("date", 1)], unique=True)
+    await db.sales.create_index([("rider_id", 1), ("date", 1)])
+    await db.customers.create_index("phone")
+    await db.login_attempts.create_index("identifier")
+    for su in SEED_USERS:
+        ex = await db.users.find_one({"username": su["username"]})
+        doc = {"name": su["name"], "email": su["email"].lower(), "whatsapp": su["whatsapp"], "role": su["role"]}
+        if not ex:
+            doc.update({"id": uid(), "username": su["username"], "password_hash": hash_pw(su["password"]), "pin_hash": hash_pw(su["pin"]),
+                        "photo": None, "joined_at": "2024-01-01", "placement": "Jakarta", "created_at": now_iso(),
+                        "settings": {"theme": "dark", "language": "en", "notifications": True, "gps_mode": "while_using"}})
+            await db.users.insert_one(doc)
+        else:
+            upd = {}
+            if not check_pw(su["password"], ex["password_hash"]):
+                upd["password_hash"] = hash_pw(su["password"])
+            if not check_pw(su["pin"], ex.get("pin_hash", "")):
+                upd["pin_hash"] = hash_pw(su["pin"])
+            if upd:
+                await db.users.update_one({"username": su["username"]}, {"$set": upd})
+    if await db.materials.count_documents({}) == 0:
+        mats = []
+        for name, unit, pq, pp, lbl, cat in SEED_MATERIALS:
+            mats.append({"id": uid(), "name": name, "unit": unit, "pack_qty": pq, "pack_price": pp, "pack_label": lbl, "category": cat,
+                         "stock": pq * 3, "min_stock": pq * 0.5, "created_at": now_iso()})
+        await db.materials.insert_many(mats)
+    if await db.menus.count_documents({}) == 0:
+        mats = {m["name"]: m["id"] for m in await db.materials.find({}, NOID).to_list(100)}
+        menus = []
+        for i, (name, price, mx, recipe) in enumerate(SEED_MENUS):
+            menus.append({"id": uid(), "name": name, "price": price, "max_stock": mx, "order": i + 1, "photo": MENU_PHOTOS.get(name),
+                          "recipe": [{"material_id": mats[m], "qty": q} for m, q in recipe], "stock": 100, "active": True, "created_at": now_iso()})
+        await db.menus.insert_many(menus)
+
+
+@app.on_event("startup")
+async def on_startup():
+    await seed()
+
+
+# ---------- Auth ----------
+@api.post("/auth/login")
+async def login(body: LoginIn, request: Request):
+    ident = body.identifier.strip().lower()
+    key = f"{request.client.host}:{ident}"
+    att = await db.login_attempts.find_one({"identifier": key})
+    if att and att.get("count", 0) >= 5 and datetime.fromisoformat(att["last"]) > datetime.now(timezone.utc) - timedelta(minutes=15):
+        raise HTTPException(429, "Too many attempts. Try again in 15 minutes.")
+    u = await db.users.find_one({"username": ident}) or await db.users.find_one({"email": ident})
+    if not u or not check_pw(body.password, u["password_hash"]):
+        await db.login_attempts.update_one({"identifier": key}, {"$inc": {"count": 1}, "$set": {"last": now_iso()}}, upsert=True)
+        raise HTTPException(401, "Invalid username/email or password")
+    await db.login_attempts.delete_one({"identifier": key})
+    token = make_token(u["id"], 30 if body.remember else 1)
+    return {"token": token, "user": public_user(u)}
+
+
+@api.get("/auth/me")
+async def me(u=Depends(ANY)):
+    return public_user(u)
+
+
+@api.post("/auth/verify-pin")
+async def verify_pin(body: PinIn, u=Depends(ANY)):
+    if not check_pw(body.pin, u.get("pin_hash", "")):
+        raise HTTPException(401, "Wrong PIN")
+    return {"ok": True}
+
+
+@api.put("/auth/profile")
+async def update_profile(body: ProfileIn, u=Depends(ANY)):
+    upd = {k: v for k, v in body.model_dump().items() if v is not None}
+    if "email" in upd:
+        upd["email"] = upd["email"].lower()
+    await db.users.update_one({"id": u["id"]}, {"$set": upd})
+    return public_user(await db.users.find_one({"id": u["id"]}))
+
+
+@api.put("/auth/password")
+async def change_password(body: PasswordIn, u=Depends(ANY)):
+    if not check_pw(body.old_password, u["password_hash"]):
+        raise HTTPException(400, "Old password incorrect")
+    await db.users.update_one({"id": u["id"]}, {"$set": {"password_hash": hash_pw(body.new_password)}})
+    return {"ok": True}
+
+
+@api.put("/auth/pin")
+async def change_pin(body: PinChangeIn, u=Depends(ANY)):
+    if not check_pw(body.password, u["password_hash"]):
+        raise HTTPException(400, "Password incorrect")
+    await db.users.update_one({"id": u["id"]}, {"$set": {"pin_hash": hash_pw(body.new_pin)}})
+    return {"ok": True}
+
+
+@api.get("/settings")
+async def get_settings(u=Depends(ANY)):
+    return u.get("settings", {})
+
+
+@api.put("/settings")
+async def put_settings(body: SettingsIn, u=Depends(ANY)):
+    upd = {f"settings.{k}": v for k, v in body.model_dump().items() if v is not None}
+    await db.users.update_one({"id": u["id"]}, {"$set": upd})
+    return (await db.users.find_one({"id": u["id"]}))["settings"]
+
+
+@api.get("/users")
+async def list_users(role: Optional[str] = None, u=Depends(ANY)):
+    q = {"role": role} if role else {}
+    if u["role"] == "rider":
+        q = {"role": "rider"}
+    users = await db.users.find(q, {"_id": 0, "password_hash": 0, "pin_hash": 0}).to_list(200)
+    return users
+
+
+# ---------- Inventory ----------
+def menu_cost(menu: dict, mats: Dict[str, dict]) -> float:
+    cost = 0.0
+    for r in menu.get("recipe", []):
+        m = mats.get(r["material_id"])
+        if m and m["pack_qty"]:
+            cost += r["qty"] / m["pack_qty"] * m["pack_price"]
+    for m in mats.values():
+        if m["category"] == "packaging" and m["pack_qty"]:
+            cost += m["pack_price"] / m["pack_qty"]
+    return round(cost)
+
+
+@api.get("/materials")
+async def list_materials(u=Depends(ANY)):
+    return await db.materials.find({}, NOID).sort("category", 1).to_list(200)
+
+
+@api.post("/materials")
+async def create_material(body: MaterialIn, u=Depends(STAFF)):
+    doc = {**body.model_dump(), "id": uid(), "stock": 0, "created_at": now_iso()}
+    await db.materials.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.put("/materials/{mid}")
+async def update_material(mid: str, body: MaterialIn, u=Depends(STAFF)):
+    await db.materials.update_one({"id": mid}, {"$set": body.model_dump()})
+    return await db.materials.find_one({"id": mid}, NOID)
+
+
+@api.get("/inventory/tx")
+async def list_inv_tx(start: Optional[str] = None, end: Optional[str] = None, u=Depends(ANY)):
+    q = {}
+    if start and end:
+        q["date"] = {"$gte": start, "$lte": end}
+    return await db.inventory_tx.find(q, NOID).sort("created_at", -1).to_list(500)
+
+
+@api.post("/inventory/tx")
+async def create_inv_tx(body: InvTxIn, u=Depends(STAFF)):
+    m = await db.materials.find_one({"id": body.material_id}, NOID)
+    if not m:
+        raise HTTPException(404, "Material not found")
+    if body.type == "in":
+        new_stock = m["stock"] + body.qty
+        cost = body.qty / m["pack_qty"] * m["pack_price"] if m["pack_qty"] else 0
+    elif body.type == "out":
+        new_stock = m["stock"] - body.qty
+        cost = 0
+    elif body.type == "opname":
+        new_stock = body.qty
+        cost = 0
+    else:
+        raise HTTPException(400, "Invalid type")
+    await db.materials.update_one({"id": m["id"]}, {"$set": {"stock": new_stock}})
+    doc = {"id": uid(), "material_id": m["id"], "material_name": m["name"], "unit": m["unit"], "type": body.type, "qty": body.qty,
+           "before": m["stock"], "after": new_stock, "cost": round(cost), "note": body.note, "date": body.date, "user": u["name"], "created_at": now_iso()}
+    await db.inventory_tx.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+# ---------- Menus & Menu stock ----------
+async def menus_full():
+    mats = {m["id"]: m for m in await db.materials.find({}, NOID).to_list(200)}
+    menus = await db.menus.find({"active": {"$ne": False}}, NOID).sort("order", 1).to_list(100)
+    for mn in menus:
+        mn["cost"] = menu_cost(mn, mats)
+        mn["margin"] = mn["price"] - mn["cost"]
+        for r in mn["recipe"]:
+            mt = mats.get(r["material_id"], {})
+            r["name"] = mt.get("name")
+            r["unit"] = mt.get("unit")
+    return menus
+
+
+@api.get("/menus")
+async def list_menus(u=Depends(ANY)):
+    return await menus_full()
+
+
+@api.post("/menus")
+async def create_menu(body: MenuIn, u=Depends(SUPER)):
+    cnt = await db.menus.count_documents({})
+    doc = {**body.model_dump(), "id": uid(), "stock": 0, "active": True, "created_at": now_iso()}
+    doc["order"] = body.order or cnt + 1
+    await db.menus.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.put("/menus/{mid}")
+async def update_menu(mid: str, body: MenuIn, u=Depends(SUPER)):
+    upd = {k: v for k, v in body.model_dump().items() if v is not None}
+    await db.menus.update_one({"id": mid}, {"$set": upd})
+    return await db.menus.find_one({"id": mid}, NOID)
+
+
+@api.delete("/menus/{mid}")
+async def delete_menu(mid: str, u=Depends(SUPER)):
+    await db.menus.update_one({"id": mid}, {"$set": {"active": False}})
+    return {"ok": True}
+
+
+@api.post("/menu-stock/produce")
+async def produce(body: ProduceIn, u=Depends(STAFF)):
+    mn = await db.menus.find_one({"id": body.menu_id}, NOID)
+    if not mn:
+        raise HTTPException(404, "Menu not found")
+    if body.type == "produce":
+        mats = {m["id"]: m for m in await db.materials.find({}, NOID).to_list(200)}
+        for r in mn["recipe"]:
+            mt = mats.get(r["material_id"])
+            if mt:
+                used = r["qty"] * body.qty
+                await db.materials.update_one({"id": mt["id"]}, {"$inc": {"stock": -used}})
+                await db.inventory_tx.insert_one({"id": uid(), "material_id": mt["id"], "material_name": mt["name"], "unit": mt["unit"], "type": "out", "qty": used,
+                                                  "before": mt["stock"], "after": mt["stock"] - used, "cost": 0, "note": f"Production {mn['name']} x{body.qty}",
+                                                  "date": body.date, "user": u["name"], "created_at": now_iso()})
+        for mt in mats.values():
+            if mt["category"] == "packaging":
+                await db.materials.update_one({"id": mt["id"]}, {"$inc": {"stock": -body.qty}})
+        new_stock = mn["stock"] + body.qty
+    else:
+        new_stock = body.qty
+    await db.menus.update_one({"id": mn["id"]}, {"$set": {"stock": new_stock}})
+    doc = {"id": uid(), "menu_id": mn["id"], "menu_name": mn["name"], "type": body.type, "qty": body.qty, "before": mn["stock"], "after": new_stock,
+           "note": body.note, "date": body.date, "user": u["name"], "created_at": now_iso()}
+    await db.menu_stock_tx.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.get("/menu-stock/tx")
+async def menu_stock_tx(u=Depends(ANY)):
+    return await db.menu_stock_tx.find({}, NOID).sort("created_at", -1).to_list(300)
+
+
+# ---------- Attendance ----------
+@api.get("/attendance")
+async def list_attendance(start: Optional[str] = None, end: Optional[str] = None, rider_id: Optional[str] = None, u=Depends(ANY)):
+    q = {}
+    if start and end:
+        q["date"] = {"$gte": start, "$lte": end}
+    if rider_id:
+        q["rider_id"] = rider_id
+    return await db.attendance.find(q, NOID).sort("date", -1).to_list(500)
+
+
+@api.post("/attendance/checkin")
+async def checkin(body: AttendanceIn, u=Depends(ANY)):
+    rider = await db.users.find_one({"id": body.rider_id, "role": "rider"})
+    if not rider or not check_pw(body.pin, rider.get("pin_hash", "")):
+        raise HTTPException(401, "Wrong rider PIN")
+    if await db.attendance.find_one({"rider_id": body.rider_id, "date": body.date}):
+        raise HTTPException(409, "Attendance already recorded today")
+    doc = {"id": uid(), "rider_id": rider["id"], "rider_name": rider["name"], "date": body.date, "checkin_at": now_iso(), "checkin_photo": body.photo,
+           "checkout_at": None, "checkout_photo": None, "lat": body.lat, "lng": body.lng}
+    await db.attendance.insert_one(doc)
+    if body.lat is not None:
+        await db.gps.update_one({"rider_id": rider["id"]}, {"$set": {"rider_id": rider["id"], "lat": body.lat, "lng": body.lng, "updated_at": now_iso()}}, upsert=True)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.post("/attendance/checkout")
+async def checkout(body: AttendanceIn, u=Depends(ANY)):
+    rider = await db.users.find_one({"id": body.rider_id, "role": "rider"})
+    if not rider or not check_pw(body.pin, rider.get("pin_hash", "")):
+        raise HTTPException(401, "Wrong rider PIN")
+    att = await db.attendance.find_one({"rider_id": body.rider_id, "date": body.date})
+    if not att:
+        raise HTTPException(404, "No check-in found today")
+    if att.get("checkout_at"):
+        raise HTTPException(409, "Already checked out today")
+    await db.attendance.update_one({"id": att["id"]}, {"$set": {"checkout_at": now_iso(), "checkout_photo": body.photo}})
+    return await db.attendance.find_one({"id": att["id"]}, NOID)
+
+
+# ---------- Rider stock ----------
+@api.get("/rider-stock")
+async def get_rider_stock(rider_id: str, date: str, u=Depends(ANY)):
+    return await db.rider_stock.find_one({"rider_id": rider_id, "date": date}, NOID)
+
+
+@api.get("/rider-stock/history")
+async def rider_stock_history(start: str, end: str, rider_id: Optional[str] = None, u=Depends(ANY)):
+    q = {"date": {"$gte": start, "$lte": end}}
+    if rider_id:
+        q["rider_id"] = rider_id
+    return await db.rider_stock.find(q, NOID).sort("date", -1).to_list(300)
+
+
+@api.post("/rider-stock")
+async def save_rider_stock(body: RiderStockIn, u=Depends(STAFF)):
+    rider = await db.users.find_one({"id": body.rider_id}, NOID)
+    if not rider:
+        raise HTTPException(404, "Rider not found")
+    prev = await db.rider_stock.find_one({"rider_id": body.rider_id, "date": body.date}, NOID)
+    prev_items = prev["items"] if prev else {}
+    menus = {m["id"]: m for m in await db.menus.find({}, NOID).to_list(100)}
+    for mid, qty in body.items.items():
+        delta = qty - prev_items.get(mid, 0)
+        if delta and mid in menus:
+            await db.menus.update_one({"id": mid}, {"$inc": {"stock": -delta}})
+    total = sum(body.items.values())
+    doc = {"id": prev["id"] if prev else uid(), "rider_id": rider["id"], "rider_name": rider["name"], "date": body.date, "items": body.items,
+           "total": total, "photo": body.photo or (prev or {}).get("photo"), "created_by": u["name"], "updated_at": now_iso()}
+    await db.rider_stock.update_one({"rider_id": body.rider_id, "date": body.date}, {"$set": doc}, upsert=True)
+    return doc
+
+
+# ---------- POS / Sales ----------
+async def pos_stock(rider_id: str, date: str):
+    rs = await db.rider_stock.find_one({"rider_id": rider_id, "date": date}, NOID)
+    initial = rs["items"] if rs else {}
+    sold: Dict[str, int] = {}
+    async for s in db.sales.find({"rider_id": rider_id, "date": date}, NOID):
+        for it in s["items"]:
+            sold[it["menu_id"]] = sold.get(it["menu_id"], 0) + it["qty"]
+    menus = await menus_full()
+    out = []
+    for m in menus:
+        out.append({"menu_id": m["id"], "name": m["name"], "price": m["price"], "photo": m.get("photo"), "order": m["order"],
+                    "initial": initial.get(m["id"], 0), "sold": sold.get(m["id"], 0), "remaining": initial.get(m["id"], 0) - sold.get(m["id"], 0)})
+    return {"has_stock": rs is not None, "items": out}
+
+
+@api.get("/pos/stock")
+async def get_pos_stock(rider_id: str, date: str, u=Depends(ANY)):
+    return await pos_stock(rider_id, date)
+
+
+@api.post("/sales")
+async def create_sale(body: SaleIn, u=Depends(ANY)):
+    if u["role"] == "rider" and body.rider_id != u["id"]:
+        raise HTTPException(403, "Riders can only sell for themselves")
+    st = await pos_stock(body.rider_id, body.date)
+    stock = {i["menu_id"]: i for i in st["items"]}
+    items, total = [], 0
+    for it in body.items:
+        s = stock.get(it.menu_id)
+        if not s:
+            raise HTTPException(404, "Menu not found")
+        if s["remaining"] < it.qty:
+            raise HTTPException(400, f"Insufficient stock for {s['name']} (remaining {s['remaining']})")
+        sub = s["price"] * it.qty
+        total += sub
+        items.append({"menu_id": it.menu_id, "name": s["name"], "qty": it.qty, "price": s["price"], "subtotal": sub})
+    cnt = await db.sales.count_documents({"date": body.date})
+    receipt_no = f"S4-{body.date.replace('-', '')}-{cnt + 1:04d}"
+    rider = await db.users.find_one({"id": body.rider_id}, NOID)
+    cash_received = body.cash_received if body.payment_method == "cash" else total
+    doc = {"id": uid(), "receipt_no": receipt_no, "rider_id": body.rider_id, "rider_name": rider["name"] if rider else "", "date": body.date,
+           "customer_name": body.customer_name, "customer_phone": body.customer_phone, "items": items, "total": total, "cups": sum(i["qty"] for i in items),
+           "payment_method": body.payment_method, "cash_received": cash_received, "change": max(0, cash_received - total), "created_at": now_iso()}
+    await db.sales.insert_one(doc)
+    if body.customer_phone or body.customer_name:
+        key = {"phone": body.customer_phone} if body.customer_phone else {"name": body.customer_name}
+        points = int(total // 10000)
+        await db.customers.update_one(key, {"$set": {"name": body.customer_name, "phone": body.customer_phone, "last_visit": body.date},
+                                            "$inc": {"points": points, "visits": 1, "total_spent": total}, "$setOnInsert": {"id": uid(), "created_at": now_iso()}}, upsert=True)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.get("/sales")
+async def list_sales(start: str, end: str, rider_id: Optional[str] = None, u=Depends(ANY)):
+    q = {"date": {"$gte": start, "$lte": end}}
+    if u["role"] == "rider":
+        q["rider_id"] = u["id"]
+    elif rider_id:
+        q["rider_id"] = rider_id
+    return await db.sales.find(q, NOID).sort("created_at", -1).to_list(1000)
+
+
+@api.get("/sales/eod")
+async def end_of_day(rider_id: str, date: str, u=Depends(ANY)):
+    st = await pos_stock(rider_id, date)
+    sales = await db.sales.find({"rider_id": rider_id, "date": date}, NOID).to_list(1000)
+    menus = {i["menu_id"]: {**i, "cash_qty": 0, "qris_qty": 0, "cash_amt": 0, "qris_amt": 0} for i in st["items"]}
+    for s in sales:
+        for it in s["items"]:
+            m = menus.get(it["menu_id"])
+            if m:
+                k = "cash" if s["payment_method"] == "cash" else "qris"
+                m[f"{k}_qty"] += it["qty"]
+                m[f"{k}_amt"] += it["subtotal"]
+    rows = list(menus.values())
+    return {"rider_id": rider_id, "date": date, "rows": rows, "transactions": len(sales),
+            "total_cups": sum(r["sold"] for r in rows), "total_cash": sum(r["cash_amt"] for r in rows), "total_qris": sum(r["qris_amt"] for r in rows),
+            "total": sum(r["cash_amt"] + r["qris_amt"] for r in rows)}
+
+
+@api.get("/customers")
+async def list_customers(u=Depends(ANY)):
+    return await db.customers.find({}, NOID).sort("points", -1).to_list(500)
+
+
+# ---------- Deposits ----------
+async def rider_debt(rider_id: str, before_date: str) -> float:
+    last = await db.deposits.find({"rider_id": rider_id, "date": {"$lt": before_date}}, NOID).sort("date", -1).limit(1).to_list(1)
+    return last[0]["remaining_debt"] if last else 0
+
+
+@api.get("/deposits/debt")
+async def get_debt(rider_id: str, date: str, u=Depends(ANY)):
+    return {"debt": await rider_debt(rider_id, date)}
+
+
+@api.get("/deposits")
+async def list_deposits(start: str, end: str, rider_id: Optional[str] = None, u=Depends(ANY)):
+    q = {"date": {"$gte": start, "$lte": end}}
+    if u["role"] == "rider":
+        q["rider_id"] = u["id"]
+    elif rider_id:
+        q["rider_id"] = rider_id
+    return await db.deposits.find(q, NOID).sort("date", -1).to_list(500)
+
+
+@api.post("/deposits")
+async def save_deposit(body: DepositIn, u=Depends(STAFF)):
+    rider = await db.users.find_one({"id": body.rider_id}, NOID)
+    pic = await db.users.find_one({"id": body.pic_id}, NOID) if body.pic_id else u
+    menus = {m["id"]: m for m in await db.menus.find({}, NOID).to_list(100)}
+    rows, cups, cash, qris, minus, wastage_total = [], 0, 0, 0, 0, 0
+    for r in body.rows:
+        m = menus.get(r.menu_id)
+        if not m:
+            continue
+        total_sold = r.cash + r.qris
+        diff = r.stock - (total_sold + r.remaining + r.wastage)
+        row_minus = max(0, diff) * m["price"]
+        rows.append({"menu_id": m["id"], "name": m["name"], "price": m["price"], "stock": r.stock, "remaining": r.remaining, "cash": r.cash, "qris": r.qris,
+                     "wastage": r.wastage, "total_sold": total_sold, "diff": diff, "cash_amt": r.cash * m["price"], "qris_amt": r.qris * m["price"], "minus": row_minus})
+        cups += total_sold
+        cash += r.cash * m["price"]
+        qris += r.qris * m["price"]
+        minus += row_minus
+        wastage_total += r.wastage
+    initial_debt = await rider_debt(body.rider_id, body.date)
+    remaining_debt = initial_debt + minus - body.debt_payment
+    net_cash = cash - body.expenses + body.debt_payment
+    if cups <= 30:
+        motiv = "Keep up the spirit! Let's tackle tomorrow's route with full energy! 💪🔥"
+    elif cups <= 49:
+        motiv = "Alhamdulillah, that's amazing! You're almost at the target, let's go all out tomorrow! 🚀📈"
+    else:
+        motiv = "🎉 Congratulations! You smashed the target! Keep up the great performance! 🏆☕"
+    prev = await db.deposits.find_one({"rider_id": body.rider_id, "date": body.date}, NOID)
+    cnt = await db.deposits.count_documents({})
+    doc = {"id": prev["id"] if prev else uid(), "receipt_no": prev["receipt_no"] if prev else f"DEP-{body.date.replace('-', '')}-{cnt + 1:03d}",
+           "rider_id": body.rider_id, "rider_name": rider["name"], "pic_id": pic["id"], "pic_name": pic["name"], "date": body.date, "rows": rows,
+           "total_cups": cups, "total_cash": cash, "total_qris": qris, "total_income": cash + qris, "minus": minus, "total_wastage": wastage_total,
+           "initial_debt": initial_debt, "new_debt": minus, "debt_payment": body.debt_payment, "remaining_debt": remaining_debt,
+           "expenses": body.expenses, "expense_note": body.expense_note, "net_cash": net_cash, "motivation": motiv, "updated_at": now_iso()}
+    await db.deposits.update_one({"rider_id": body.rider_id, "date": body.date}, {"$set": doc}, upsert=True)
+    return doc
+
+
+# ---------- Invoices ----------
+@api.get("/invoices")
+async def list_invoices(u=Depends(SUPER)):
+    return await db.invoices.find({}, NOID).sort("created_at", -1).to_list(300)
+
+
+@api.post("/invoices")
+async def create_invoice(body: InvoiceIn, u=Depends(SUPER)):
+    menus = {m["id"]: m for m in await db.menus.find({}, NOID).to_list(100)}
+    rows, subtotal = [], 0
+    for r in body.rows:
+        m = menus.get(r.menu_id)
+        if not m or r.qty <= 0:
+            continue
+        price = r.price if r.price is not None else m["price"]
+        rows.append({"menu_id": m["id"], "name": m["name"], "qty": r.qty, "price": price, "subtotal": price * r.qty})
+        subtotal += price * r.qty
+    cnt = await db.invoices.count_documents({})
+    total = subtotal - body.discount
+    doc = {"id": uid(), "invoice_no": f"INV-{body.date.replace('-', '')}-{cnt + 1:03d}", "customer_name": body.customer_name, "customer_phone": body.customer_phone,
+           "date": body.date, "rows": rows, "subtotal": subtotal, "discount": body.discount, "total": total, "cups": sum(r["qty"] for r in rows),
+           "payment_method": body.payment_method, "note": body.note, "created_by": u["name"], "created_at": now_iso()}
+    await db.invoices.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+# ---------- Expenses / Handover ----------
+@api.get("/expenses")
+async def list_expenses(start: str, end: str, u=Depends(STAFF)):
+    return await db.expenses.find({"date": {"$gte": start, "$lte": end}}, NOID).sort("date", -1).to_list(500)
+
+
+@api.post("/expenses")
+async def create_expense(body: ExpenseIn, u=Depends(STAFF)):
+    doc = {**body.model_dump(), "id": uid(), "user": u["name"], "created_at": now_iso()}
+    await db.expenses.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.delete("/expenses/{eid}")
+async def delete_expense(eid: str, u=Depends(SUPER)):
+    await db.expenses.delete_one({"id": eid})
+    return {"ok": True}
+
+
+@api.get("/handovers")
+async def list_handovers(start: str, end: str, u=Depends(SUPER)):
+    return await db.handovers.find({"date": {"$gte": start, "$lte": end}}, NOID).sort("date", -1).to_list(500)
+
+
+@api.post("/handovers")
+async def create_handover(body: HandoverIn, u=Depends(SUPER)):
+    g = await db.users.find_one({"id": body.giver_id}, NOID)
+    r = await db.users.find_one({"id": body.receiver_id}, NOID)
+    doc = {**body.model_dump(), "id": uid(), "giver_name": g["name"] if g else "", "receiver_name": r["name"] if r else "", "created_at": now_iso()}
+    await db.handovers.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+# ---------- Aggregations ----------
+async def daily_summaries(start: str, end: str, rider_id: Optional[str] = None):
+    """One record per (rider, date): deposit wins over POS sales."""
+    q: Dict[str, Any] = {"date": {"$gte": start, "$lte": end}}
+    if rider_id:
+        q["rider_id"] = rider_id
+    recs: Dict[str, dict] = {}
+    async for d in db.deposits.find(q, NOID):
+        recs[f"{d['rider_id']}|{d['date']}"] = {"rider_id": d["rider_id"], "rider_name": d["rider_name"], "date": d["date"], "cups": d["total_cups"],
+                                                 "cash": d["total_cash"], "qris": d["total_qris"], "source": "deposit",
+                                                 "menu": {r["name"]: r["total_sold"] for r in d["rows"]}}
+    async for s in db.sales.find(q, NOID):
+        k = f"{s['rider_id']}|{s['date']}"
+        if k in recs and recs[k]["source"] == "deposit":
+            continue
+        r = recs.setdefault(k, {"rider_id": s["rider_id"], "rider_name": s["rider_name"], "date": s["date"], "cups": 0, "cash": 0, "qris": 0, "source": "pos", "menu": {}})
+        r["cups"] += s["cups"]
+        r["cash" if s["payment_method"] == "cash" else "qris"] += s["total"]
+        for it in s["items"]:
+            r["menu"][it["name"]] = r["menu"].get(it["name"], 0) + it["qty"]
+    return list(recs.values())
+
+
+def tier_for(gross: float, days: int):
+    if gross >= 20000000 and days >= 25:
+        return "Platinum", 0.20
+    if gross >= 10000000 and days >= 25:
+        return "Gold", 0.15
+    if gross >= 5000000 and days >= 25:
+        return "Silver", 0.10
+    if gross >= 1000000:
+        return "Bronze", 0.05
+    return "None", 0.0
+
+
+TIERS = [("Bronze", 1000000, 0.05, 0), ("Silver", 5000000, 0.10, 25), ("Gold", 10000000, 0.15, 25), ("Platinum", 20000000, 0.20, 25)]
+
+
+@api.get("/dashboard/summary")
+async def dashboard_summary(start: str, end: str, rider_id: Optional[str] = None, u=Depends(ANY)):
+    if u["role"] == "rider":
+        rider_id = u["id"]
+    recs = await daily_summaries(start, end, rider_id)
+    by_rider: Dict[str, dict] = {}
+    by_date: Dict[str, dict] = {}
+    by_menu: Dict[str, int] = {}
+    for r in recs:
+        br = by_rider.setdefault(r["rider_id"], {"rider_id": r["rider_id"], "rider_name": r["rider_name"], "cups": 0, "cash": 0, "qris": 0, "days": 0})
+        br["cups"] += r["cups"]; br["cash"] += r["cash"]; br["qris"] += r["qris"]; br["days"] += 1
+        bd = by_date.setdefault(r["date"], {"date": r["date"], "cups": 0, "cash": 0, "qris": 0})
+        bd["cups"] += r["cups"]; bd["cash"] += r["cash"]; bd["qris"] += r["qris"]
+        for k, v in r["menu"].items():
+            by_menu[k] = by_menu.get(k, 0) + v
+    exp_q = {"date": {"$gte": start, "$lte": end}}
+    expenses = await db.expenses.find(exp_q, NOID).to_list(1000) if u["role"] != "rider" else []
+    purchases = await db.inventory_tx.find({**exp_q, "type": "in"}, NOID).to_list(1000) if u["role"] != "rider" else []
+    invoices = await db.invoices.find(exp_q, NOID).to_list(1000) if u["role"] == "superadmin" else []
+    total_exp = sum(e["amount"] for e in expenses if e.get("type", "expense") == "expense") + sum(p["cost"] for p in purchases)
+    inv_income = sum(i["total"] for i in invoices)
+    for bd in by_date.values():
+        bd["expenses"] = sum(e["amount"] for e in expenses if e["date"] == bd["date"] and e.get("type", "expense") == "expense") + sum(p["cost"] for p in purchases if p["date"] == bd["date"])
+    return {"cups": sum(r["cups"] for r in recs), "cash": sum(r["cash"] for r in recs), "qris": sum(r["qris"] for r in recs), "invoice_income": inv_income,
+            "expenses": total_exp, "transactions": await db.sales.count_documents({**exp_q, **({"rider_id": rider_id} if rider_id else {})}),
+            "by_rider": sorted(by_rider.values(), key=lambda x: -(x["cash"] + x["qris"])), "by_date": sorted(by_date.values(), key=lambda x: x["date"]),
+            "by_menu": sorted([{"name": k, "qty": v} for k, v in by_menu.items()], key=lambda x: -x["qty"]), "days": len(set(r["date"] for r in recs))}
+
+
+@api.get("/salary")
+async def salary(start: str, end: str, rider_id: Optional[str] = None, u=Depends(ANY)):
+    if u["role"] == "rider":
+        rider_id = u["id"]
+    riders = await db.users.find({"role": "rider", **({"id": rider_id} if rider_id else {})}, {"_id": 0, "password_hash": 0, "pin_hash": 0}).to_list(50)
+    recs = await daily_summaries(start, end, rider_id)
+    att_q = {"date": {"$gte": start, "$lte": end}}
+    if rider_id:
+        att_q["rider_id"] = rider_id
+    atts = await db.attendance.find(att_q, NOID).to_list(2000)
+    out = []
+    for r in riders:
+        mine = [x for x in recs if x["rider_id"] == r["id"]]
+        gross = sum(x["cash"] + x["qris"] for x in mine)
+        cups = sum(x["cups"] for x in mine)
+        att_days = len([a for a in atts if a["rider_id"] == r["id"]])
+        sale_days = set(x["date"] for x in mine)
+        allowance_days = len([x for x in mine if x["cups"] > 20])
+        allowance = allowance_days * 20000
+        tier, pct = tier_for(gross, att_days)
+        incentive = round(gross * pct)
+        nxt = next(((n, th, p, d) for n, th, p, d in TIERS if gross < th), None)
+        out.append({"rider_id": r["id"], "rider_name": r["name"], "photo": r.get("photo"), "joined_at": r.get("joined_at"), "placement": r.get("placement"),
+                    "gross": gross, "cups": cups, "attendance_days": att_days, "sales_days": len(sale_days), "allowance_days": allowance_days,
+                    "allowance": allowance, "tier": tier, "incentive_pct": pct, "incentive": incentive, "total_income": allowance + incentive,
+                    "next_tier": {"name": nxt[0], "threshold": nxt[1], "pct": nxt[2], "min_days": nxt[3], "remaining": nxt[1] - gross,
+                                  "progress": round(gross / nxt[1] * 100, 1)} if nxt else None})
+    return {"riders": out, "tiers": [{"name": n, "threshold": th, "pct": p, "min_days": d} for n, th, p, d in TIERS], "rider_count": len(out)}
+
+
+@api.get("/finance/summary")
+async def finance_summary(start: str, end: str, u=Depends(SUPER)):
+    recs = await daily_summaries(start, end)
+    expenses = await db.expenses.find({"date": {"$gte": start, "$lte": end}}, NOID).to_list(2000)
+    purchases = await db.inventory_tx.find({"date": {"$gte": start, "$lte": end}, "type": "in"}, NOID).to_list(2000)
+    invoices = await db.invoices.find({"date": {"$gte": start, "$lte": end}}, NOID).to_list(1000)
+    handovers = await db.handovers.find({"date": {"$gte": start, "$lte": end}}, NOID).to_list(1000)
+    ledger = []
+    for r in recs:
+        if r["cash"]:
+            ledger.append({"date": r["date"], "type": "in", "account": "cash", "category": "Rider Sales (Cash)", "desc": r["rider_name"], "amount": r["cash"]})
+        if r["qris"]:
+            ledger.append({"date": r["date"], "type": "in", "account": "bank", "category": "Rider Sales (QRIS)", "desc": r["rider_name"], "amount": r["qris"]})
+    for i in invoices:
+        ledger.append({"date": i["date"], "type": "in", "account": "cash" if i["payment_method"] == "cash" else "bank", "category": "Order Invoice", "desc": f"{i['invoice_no']} {i['customer_name']}", "amount": i["total"]})
+    for p in purchases:
+        if p["cost"]:
+            ledger.append({"date": p["date"], "type": "out", "account": "cash", "category": "Purchase", "desc": f"{p['material_name']} +{p['qty']}{p['unit']}", "amount": p["cost"]})
+    for e in expenses:
+        ledger.append({"date": e["date"], "type": "in" if e.get("type") == "income" else "out", "account": e.get("account", "cash"), "category": e["category"], "desc": e.get("note", ""), "amount": e["amount"], "id": e["id"]})
+    ledger.sort(key=lambda x: x["date"])
+    bal = {"cash": 0, "bank": 0}
+    for l in ledger:
+        bal[l["account"]] += l["amount"] if l["type"] == "in" else -l["amount"]
+        l["balance_cash"], l["balance_bank"] = bal["cash"], bal["bank"]
+    income = sum(l["amount"] for l in ledger if l["type"] == "in")
+    outgo = sum(l["amount"] for l in ledger if l["type"] == "out")
+    cat: Dict[str, float] = {}
+    for l in ledger:
+        if l["type"] == "out":
+            cat[l["category"]] = cat.get(l["category"], 0) + l["amount"]
+    mats = {m["id"]: m for m in await db.materials.find({}, NOID).to_list(200)}
+    menus = await db.menus.find({}, NOID).to_list(100)
+    cogs = 0
+    menu_cost_map = {m["name"]: menu_cost(m, mats) for m in menus}
+    for r in recs:
+        for name, qty in r["menu"].items():
+            cogs += menu_cost_map.get(name, 0) * qty
+    return {"income": income, "outgo": outgo, "net": income - outgo, "cash_balance": bal["cash"], "bank_balance": bal["bank"], "cogs": cogs,
+            "gross_profit": income - cogs, "handover_total": sum(h["amount"] for h in handovers), "ledger": list(reversed(ledger)),
+            "by_category": [{"name": k, "amount": v} for k, v in cat.items()], "inventory_value": sum(m["stock"] / m["pack_qty"] * m["pack_price"] for m in mats.values() if m["pack_qty"])}
+
+
+# ---------- GPS ----------
+@api.post("/gps")
+async def post_gps(body: GpsIn, u=Depends(ANY)):
+    await db.gps.update_one({"rider_id": u["id"]}, {"$set": {"rider_id": u["id"], "rider_name": u["name"], "lat": body.lat, "lng": body.lng, "updated_at": now_iso()}}, upsert=True)
+    return {"ok": True}
+
+
+@api.get("/gps/active")
+async def gps_active(date: str, u=Depends(ANY)):
+    atts = await db.attendance.find({"date": date, "checkout_at": None}, NOID).to_list(100)
+    ids = [a["rider_id"] for a in atts]
+    pts = await db.gps.find({"rider_id": {"$in": ids}}, NOID).to_list(100)
+    names = {a["rider_id"]: a["rider_name"] for a in atts}
+    for p in pts:
+        p["rider_name"] = names.get(p["rider_id"], p.get("rider_name"))
+    return pts
+
+
+@api.get("/")
+async def root():
+    return {"app": "SI FOUR AM", "status": "ok"}
+
+
+app.include_router(api)
+app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','), allow_methods=["*"], allow_headers=["*"])
+
+
+@app.on_event("shutdown")
+async def shutdown():
+    client.close()

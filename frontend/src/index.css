@@ -1,0 +1,91 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 6% 6%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 6% 6%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 6% 6%;
+    --primary: 25 100% 50%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 20% 97%;
+    --secondary-foreground: 240 6% 10%;
+    --muted: 210 20% 96%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 25 100% 96%;
+    --accent-foreground: 25 100% 30%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 25 100% 50%;
+    --chart-1: 25 100% 50%;
+    --chart-2: 43 74% 49%;
+    --chart-3: 160 60% 45%;
+    --chart-4: 220 70% 50%;
+    --chart-5: 340 75% 55%;
+    --radius: 1rem;
+    --gold-a: rgba(184, 134, 11, 0.55);
+    --gold-b: rgba(212, 175, 55, 0.15);
+  }
+  .dark {
+    --background: 0 0% 2%;
+    --foreground: 240 5% 96%;
+    --card: 240 4% 7%;
+    --card-foreground: 240 5% 96%;
+    --popover: 240 4% 7%;
+    --popover-foreground: 240 5% 96%;
+    --primary: 25 100% 50%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 4% 11%;
+    --secondary-foreground: 240 5% 96%;
+    --muted: 240 4% 12%;
+    --muted-foreground: 240 5% 63%;
+    --accent: 25 100% 12%;
+    --accent-foreground: 25 100% 65%;
+    --destructive: 0 63% 45%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 4% 16%;
+    --input: 240 4% 16%;
+    --ring: 25 100% 50%;
+    --gold-a: rgba(212, 175, 55, 0.6);
+    --gold-b: rgba(255, 215, 0, 0.12);
+  }
+  * { @apply border-border; }
+  html { -webkit-font-smoothing: antialiased; }
+  body { @apply bg-background text-foreground; font-family: 'Plus Jakarta Sans', sans-serif; }
+  h1, h2, h3, h4, .font-heading { font-family: 'Outfit', sans-serif; }
+  .font-mono { font-family: 'JetBrains Mono', monospace; }
+  ::selection { background: rgba(255, 107, 0, 0.35); }
+}
+
+@layer components {
+  .bento { @apply rounded-2xl border border-border/70 bg-card p-5 sm:p-6 relative overflow-hidden transition-shadow duration-300; }
+  .bento:hover { box-shadow: 0 8px 30px -12px rgba(255, 107, 0, 0.18); }
+  .gold { position: relative; border-color: transparent !important; background-clip: padding-box; }
+  .gold::before {
+    content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px;
+    background: linear-gradient(135deg, var(--gold-a) 0%, var(--gold-b) 50%, var(--gold-a) 100%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor; mask-composite: exclude; pointer-events: none;
+  }
+  .eyebrow { @apply text-[11px] uppercase tracking-[0.18em] text-muted-foreground font-semibold; }
+  .field { @apply w-full h-10 rounded-xl border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/40 transition-shadow; }
+  .btn-primary { @apply inline-flex items-center justify-center gap-2 rounded-full bg-primary text-primary-foreground px-5 h-11 text-sm font-semibold transition-transform duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:hover:scale-100; }
+  .btn-ghost { @apply inline-flex items-center justify-center gap-2 rounded-full border border-border bg-card px-5 h-11 text-sm font-semibold transition-colors duration-200 hover:bg-muted; }
+  .btn-wa { @apply inline-flex items-center justify-center gap-2 rounded-full bg-[#25D366] text-white px-5 h-11 text-sm font-semibold transition-transform duration-200 hover:scale-[1.02]; }
+  .table-x { @apply w-full text-sm; }
+  .table-x th { @apply text-left eyebrow py-3 px-3 border-b border-border; }
+  .table-x td { @apply py-3 px-3 border-b border-border/50; }
+  .num { @apply font-mono tabular-nums; }
+  .fade-up { animation: fadeUp .5s ease both; }
+}
+
+@keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.leaflet-container { border-radius: 1rem; z-index: 0; }
+[data-debug-wrapper="true"] { display: contents !important; }

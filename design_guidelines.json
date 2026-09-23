@@ -1,0 +1,126 @@
+{
+  "app_name": "SI FOUR AM",
+  "app_description": "Advanced luxury coffee-cart business management platform featuring POS cashier, recipe inventory, rider stock & photo evidence, rider deposits with receipts & WhatsApp export, financial ledger, salary/incentive tier progression (Bronze/Silver/Gold/Platinum), real-time Leaflet GPS tracking, and role-based views (Superadmin, Bar Team, Rider).",
+  "design_archetype": "Luxury App Store Minimalist Bento Grid",
+  "theme": {
+    "dark_mode": {
+      "bg_primary": "#050505",
+      "bg_surface": "#0D0D0E",
+      "bg_card": "#121214",
+      "text_primary": "#F5F5F7",
+      "text_secondary": "#A1A1AA",
+      "border": "#27272A",
+      "accent_orange": "#FF6B00",
+      "accent_orange_hover": "#E05E00",
+      "gold_gradient_border": "linear-gradient(135deg, rgba(212,175,55,0.5) 0%, rgba(255,215,0,0.15) 50%, rgba(212,175,55,0.3) 100%)",
+      "glow_orange": "0 0 20px rgba(255, 107, 0, 0.25)"
+    },
+    "light_mode": {
+      "bg_primary": "#FFFFFF",
+      "bg_surface": "#F8F9FA",
+      "bg_card": "#FFFFFF",
+      "text_primary": "#0F0F10",
+      "text_secondary": "#64748B",
+      "border": "#E2E8F0",
+      "accent_orange": "#FF6B00",
+      "accent_orange_hover": "#E05E00",
+      "gold_gradient_border": "linear-gradient(135deg, rgba(184,134,11,0.3) 0%, rgba(212,175,55,0.1) 50%, rgba(184,134,11,0.2) 100%)",
+      "glow_orange": "0 0 15px rgba(255, 107, 0, 0.15)"
+    }
+  },
+  "typography": {
+    "font_family_heading": "Outfit, Satoshi, -apple-system, sans-serif",
+    "font_family_body": "Plus Jakarta Sans, Inter, sans-serif",
+    "font_family_mono": "JetBrains Mono, monospace",
+    "sizes": {
+      "h1": "text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight",
+      "h2": "text-2xl sm:text-3xl font-semibold tracking-tight",
+      "h3": "text-xl sm:text-2xl font-medium",
+      "h4": "text-lg font-medium",
+      "body": "text-sm sm:text-base leading-relaxed",
+      "small": "text-xs text-muted-foreground uppercase tracking-wider"
+    }
+  },
+  "layout_architecture": {
+    "desktop": {
+      "structure": "Sidebar Navigation on left (fixed width w-64/w-72), main scrollable content area on right.",
+      "navigation_profile": "Profile avatar & user credentials positioned at top-right or bottom of navigation sidebar.",
+      "padding": "p-6 sm:p-8"
+    },
+    "mobile": {
+      "structure": "Bottom Navigation Bar (fixed bottom z-50), custom role-specific simplified touch-first interface.",
+      "navigation_profile": "Profile badge positioned on top-right of the mobile header bar.",
+      "padding": "p-4 pb-24"
+    },
+    "bento_grid": {
+      "columns": "grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-12",
+      "gap": "gap-4 md:gap-6",
+      "card_style": "rounded-2xl border border-border/60 bg-card p-5 sm:p-6 shadow-sm hover:shadow-md transition-all relative overflow-hidden"
+    }
+  },
+  "key_features_and_components": {
+    "login_system": {
+      "methods": ["Username/Email + Password", "4-digit POS PIN Pad Keypad"],
+      "features": ["Remember Me toggle", "Quick Role switcher demo pills for Superadmin, Bar Team, Rider"]
+    },
+    "pos_cashier": {
+      "product_grid": "Tap-to-add category filtered items with live stock badges & price",
+      "cart_drawer": "Running total calculation, discount selection, cash payment modal with live change calculator",
+      "receipt_modal": "App Store aesthetic formatted receipt card with quick screenshot/download button & WhatsApp share link"
+    },
+    "rider_management": {
+      "stock_and_evidence": "Interactive stock table with dropdown selectors, photo upload simulation preview",
+      "deposit_and_receipt": "Rider daily cash deposit ledger with receipt generation and direct WhatsApp notification export"
+    },
+    "dashboard_and_analytics": {
+      "kpi_bento_cards": ["Cups Sold Today", "Net Cash Revenue", "QRIS Payments", "Active Carts / Riders"],
+      "charts": "Recharts visual analytics for sales trends, peak hours, and stock depletion rate",
+      "leaflet_gps_map": "Interactive Leaflet map displaying active coffee cart rider locations in real-time"
+    },
+    "financials_and_tiers": {
+      "financial_report": "Income, Expense, Cash Handover logs with filterable date range",
+      "salary_tier": "Gamified progression bar showing Bronze, Silver, Gold, Platinum threshold status and bonus calculations"
+    }
+  },
+  "image_urls": [
+    {
+      "category": "espresso_drinks",
+      "description": "Iced latte espresso drink in clear glass for POS item display",
+      "url": "https://images.unsplash.com/photo-1559496417-e7f25cb247f3?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA3MDB8MHwxfHNlYXJjaHwzfHxhcnRpc2FuJTIwY29mZmVlJTIwZHJpbmtzJTIwZXNwcmVzc298ZW58MHx8fHwxNzkwMTYwOTIzfDA&ixlib=rb-4.1.0&q=85"
+    },
+    {
+      "category": "latte_art",
+      "description": "Hot Cappuccino Latte art cup on wooden table",
+      "url": "https://images.unsplash.com/photo-1509042239860-f550ce710b93?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA3MDB8MHwxfHNlYXJjaHwxfHxhcnRpc2FuJTIwY29mZmVlJTIwZHJpbmtzJTIwZXNwcmVzc298ZW58MHx8fHwxNzkwMTYwOTIzfDA&ixlib=rb-4.1.0&q=85"
+    },
+    {
+      "category": "coffee_beans_and_craft",
+      "description": "Flat lay ground coffee beans and portafilter for inventory recipe header",
+      "url": "https://images.unsplash.com/photo-1511920170033-f8396924c348?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA3MDB8MHwxfHNlYXJjaHwyfHxhcnRpc2FuJTIwY29mZmVlJTIwZHJpbmtzJTIwZXNwcmVzc298ZW58MHx8fHwxNzkwMTYwOTIzfDA&ixlib=rb-4.1.0&q=85"
+    },
+    {
+      "category": "dark_mode_latte",
+      "description": "Elegant cafe latte with heart art on dark black background",
+      "url": "https://images.pexels.com/photos/33034292/pexels-photo-33034292.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"
+    }
+  ],
+  "testing_attributes": {
+    "rule": "Every interactive element (button, input, select, tab, chart container, badge, card) MUST have a data-testid attribute in kebab-case.",
+    "examples": [
+      "data-testid=\"login-submit-button\"",
+      "data-testid=\"pos-product-card-espresso\"",
+      "data-testid=\"cart-checkout-button\"",
+      "data-testid=\"rider-stock-dropdown\"",
+      "data-testid=\"theme-toggle-button\"",
+      "data-testid=\"language-switch-button\""
+    ]
+  },
+  "instructions_to_main_agent": [
+    "Use JavaScript (.js / .jsx) components as per project setup.",
+    "Ensure both Light and Dark themes work seamlessly via dark class toggle on document root.",
+    "Support EN and ID (Indonesian) language toggle across all key texts, labels, and receipts.",
+    "All cards in Bento grid should feature smooth hover transitions, clean padding, and gold gradient accent borders where highlighted.",
+    "Implement Sonner toasts for cart additions, stock updates, cash handovers, and receipt exports.",
+    "In Leaflet map components, dynamically handle map tiles and custom pin markers for active coffee riders."
+  ]
+}
