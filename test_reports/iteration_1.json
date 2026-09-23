@@ -1,0 +1,33 @@
+{
+  "summary": "Full backend + frontend regression testing for SI FOUR AM. 19/19 backend pytest tests pass covering auth (login/wrong-pw/me), role guards (rider vs barteam vs superadmin on rider-stock, deposits, finance, invoices), menus (9 items ordered, cost>0), inventory tx (in/out/opname), menu-stock produce (increments menu stock, decrements recipe materials + packaging), rider-stock upsert (no duplicate; delta decrements central menu stock), POS sales (receipt_no S4-YYYYMMDD-NNNN, remaining decremented, overstock=400, customer saved with points, EOD summary), attendance (wrong-pin 401, duplicate 409, checkout), deposit (correct diff/minus/net_cash/motivation formula + upsert), invoice (INV- format, subtotal-discount=total), dashboard/salary tiers (4)/expenses/handovers. Frontend Playwright: superadmin login shows sidebar with Main/RiderStock/Deposit/Handover/More; theme toggle flips dark/light; rider ricky lands on /pos, PIN gate accepts pin-key-9/6/2/0 and unlocks POS with 9 products; barteam login → /deposit shows deposit-rider-select, calc-net-cash, deposit-save-button, 9 deposit-cash-<menuId> selects; /rider-stock page loads with rider-stock-total and rider-stock-save-button; Settings lang-id switches labels to Bahasa Indonesia.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Console (all pages)", "issues": ["React warning: 'Encountered two children with the same key, 9' emitted many times. Likely a list rendered with `key={m.order}` (menus have order 1..9, but somewhere the value 9 is duplicated) or key=index conflict. Not a functional bug but should be fixed by using stable unique ids (e.g. `key={m.id}`)."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_si4am_backend.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Fix React duplicate-key warning (key=9). Search for map calls in POS/RiderStock/Deposit/Invoice using `key={...order}` or `key={i}` and switch to `key={item.id}` for uniqueness."
+  ],
+  "critical_code_review_comments": [
+    "server.py is ~960 lines — consider splitting into routers (auth, inventory, sales, deposits, finance).",
+    "CORSMiddleware is added AFTER app.include_router — works with Starlette but standard practice is add middleware before include_router.",
+    "login_attempts lockout keyed by client.host+identifier: behind an ingress this may become a shared IP; consider trusting X-Forwarded-For or scoping only by identifier.",
+    "produce endpoint decrements ALL packaging materials by qty each time, not only those in recipe — intentional? If recipe already lists packaging, this may double-deduct.",
+    "Deposit.net_cash uses cash - expenses + debt_payment (spec matches). Note: debt_payment does not reduce cash physically; consider clarifying UI wording."
+  ],
+  "updated_files": ["/app/backend/tests/test_si4am_backend.py"],
+  "success_rate": {"backend": "100% (19/19)", "frontend": "~95% (all critical flows pass; one non-blocking React key warning)"},
+  "test_credentials": "See /app/memory/test_credentials.md (baa/Nai130994, alif/Jkt221112, ricky/Jkt221112 PIN 9620, etc.)",
+  "seed_data_creation": "Tests use TEST_DATE = today-7 and TEST_ prefixed customer/notes. No prod data modified.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend test file at /app/backend/tests/test_si4am_backend.py runs with `python -m pytest backend/tests/test_si4am_backend.py -o addopts=''` (project's pytest.ini enables xdist LoadScope which may cause parallel data races on shared rider/date; -o addopts='' disables). Existing seed data has sales/deposits for rider ricky today; use TEST_DATE (today-7) or other riders (tanjung/rijal) for clean flows. All 12 seeded users active. React duplicate-key warning (value '9') still present.",
+  "rca of the issue": "N/A — no blocking issues found."
+}

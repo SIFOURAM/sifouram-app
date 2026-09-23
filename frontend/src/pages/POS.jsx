@@ -24,7 +24,7 @@ function PinGate() {
       <p className="eyebrow mb-2">{t("pin")}</p><h2 className="text-2xl font-bold mb-6">{t("enterPin")}</h2>
       <div className="flex justify-center gap-3 mb-8 h-4">{Array.from({ length: 6 }).map((_, i) => <span key={i} className={`w-3 h-3 rounded-full transition-colors ${i < pin.length ? "bg-primary" : "bg-muted"}`} />)}</div>
       <div className="grid grid-cols-3 gap-3">{["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "⌫"].map((k, i) => (
-        k === "" ? <span key={i} /> : <button key={k} data-testid={`pin-key-${k === "⌫" ? "del" : k}`} onClick={() => press(k)} className="h-16 rounded-2xl bg-card border border-border text-xl font-heading font-semibold hover:bg-muted active:scale-95 transition-transform">{k}</button>))}</div>
+        k === "" ? <span key={`blank-${i}`} /> : <button key={`k-${k}`} data-testid={`pin-key-${k === "⌫" ? "del" : k}`} onClick={() => press(k)} className="h-16 rounded-2xl bg-card border border-border text-xl font-heading font-semibold hover:bg-muted active:scale-95 transition-transform">{k}</button>))}</div>
       <button data-testid="pin-submit" onClick={() => press("")} className="mt-4 text-xs text-muted-foreground">PIN 4–6 digits · auto-verifies</button>
     </div>
   );
