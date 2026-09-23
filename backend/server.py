@@ -6,7 +6,8 @@ load_dotenv(ROOT_DIR / '.env')
 import os, uuid, logging, bcrypt, jwt, requests, threading
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Dict, Any
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response
+import base64, re
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel
@@ -61,6 +62,61 @@ async def gs_sync(sheet: str, record: dict, photo: Optional[str] = None, photo_n
         return
     rec = {k: v for k, v in record.items() if k not in ("photo", "checkin_photo", "checkout_photo", "_id")}
     threading.Thread(target=_gs_post, args=(url, {"sheet": sheet, "record": rec, "photo": photo, "photo_name": photo_name}), daemon=True).start()
+
+
+# ---------- Emergent Object Storage (file & media) ----------
+STORAGE_BASE = (os.environ.get("INTEGRATION_PROXY_URL") or "").strip() or "https://integrations.emergentagent.com"
+STORAGE_URL = STORAGE_BASE.rstrip("/") + "/objstore/api/v1/storage"
+APP_NAME = "sifouram"
+storage_key = None
+
+
+def init_storage(force: bool = False):
+    global storage_key
+    if storage_key and not force:
+        return storage_key
+    resp = requests.post(f"{STORAGE_URL}/init", json={"emergent_key": os.environ.get("EMERGENT_LLM_KEY")}, timeout=30)
+    resp.raise_for_status()
+    storage_key = resp.json()["storage_key"]
+    return storage_key
+
+
+def put_object(path: str, data: bytes, content_type: str) -> dict:
+    key = init_storage()
+    resp = requests.put(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": key, "Content-Type": content_type}, data=data, timeout=120)
+    if resp.status_code == 404:
+        key = init_storage(force=True)
+        resp = requests.put(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": key, "Content-Type": content_type}, data=data, timeout=120)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def get_object(path: str):
+    key = init_storage()
+    resp = requests.get(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": key}, timeout=60)
+    if resp.status_code == 404:
+        raise HTTPException(404, "File not found")
+    resp.raise_for_status()
+    return resp.content, resp.headers.get("Content-Type", "application/octet-stream")
+
+
+async def store_photo(data_url: Optional[str], folder: str, user_id: str) -> Optional[str]:
+    """Upload a base64 data-URL image to object storage; returns /api/files/<path> URL (falls back to the data URL)."""
+    if not data_url or not data_url.startswith("data:"):
+        return data_url
+    m = re.match(r"^data:(image/(\w+));base64,(.*)$", data_url, re.S)
+    if not m:
+        return data_url
+    ext = "jpg" if m.group(2) == "jpeg" else m.group(2)
+    path = f"{APP_NAME}/{folder}/{user_id}/{uid()}.{ext}"
+    try:
+        raw = base64.b64decode(m.group(3))
+        res = put_object(path, raw, m.group(1))
+        await db.files.insert_one({"id": uid(), "storage_path": res["path"], "folder": folder, "user_id": user_id, "content_type": m.group(1), "size": res.get("size", len(raw)), "is_deleted": False, "created_at": now_iso()})
+        return f"/api/files/{res['path']}"
+    except Exception as e:
+        logger.warning(f"Object storage upload failed, keeping inline image: {e}")
+        return data_url
 
 
 def hash_pw(p: str) -> str:
@@ -380,6 +436,32 @@ async def seed():
 @app.on_event("startup")
 async def on_startup():
     await seed()
+    try:
+        init_storage()
+        logger.info("Object storage initialized")
+    except Exception as e:
+        logger.error(f"Storage init failed: {e}")
+
+
+@api.get("/files/{path:path}")
+async def serve_file(path: str):
+    rec = await db.files.find_one({"storage_path": path, "is_deleted": False}, NOID)
+    if not rec:
+        raise HTTPException(404, "File not found")
+    data, ct = get_object(path)
+    return Response(content=data, media_type=rec.get("content_type", ct), headers={"Cache-Control": "public, max-age=86400"})
+
+
+@api.get("/files")
+async def list_files(folder: Optional[str] = None, u=Depends(STAFF)):
+    q = {"is_deleted": False, **({"folder": folder} if folder else {})}
+    return await db.files.find(q, NOID).sort("created_at", -1).limit(200).to_list(200)
+
+
+@api.delete("/files/{path:path}")
+async def delete_file(path: str, u=Depends(SUPER)):
+    await db.files.update_one({"storage_path": path}, {"$set": {"is_deleted": True}})
+    return {"ok": True}
 
 
 # ---------- Auth ----------
@@ -416,6 +498,8 @@ async def update_profile(body: ProfileIn, u=Depends(ANY)):
     upd = {k: v for k, v in body.model_dump().items() if v is not None}
     if "email" in upd:
         upd["email"] = upd["email"].lower()
+    if upd.get("photo"):
+        upd["photo"] = await store_photo(upd["photo"], "profiles", u["id"])
     await db.users.update_one({"id": u["id"]}, {"$set": upd})
     return public_user(await db.users.find_one({"id": u["id"]}))
 
@@ -554,6 +638,8 @@ async def create_menu(body: MenuIn, u=Depends(SUPER)):
 @api.put("/menus/{mid}")
 async def update_menu(mid: str, body: MenuIn, u=Depends(SUPER)):
     upd = {k: v for k, v in body.model_dump().items() if v is not None}
+    if upd.get("photo"):
+        upd["photo"] = await store_photo(upd["photo"], "menus", u["id"])
     await db.menus.update_one({"id": mid}, {"$set": upd})
     return await db.menus.find_one({"id": mid}, NOID)
 
@@ -613,7 +699,8 @@ async def checkin(body: AttendanceIn, u=Depends(ANY)):
         raise HTTPException(401, "Wrong rider PIN")
     if await db.attendance.find_one({"rider_id": body.rider_id, "date": body.date}):
         raise HTTPException(409, "Attendance already recorded today")
-    doc = {"id": uid(), "rider_id": rider["id"], "rider_name": rider["name"], "date": body.date, "checkin_at": now_iso(), "checkin_time": now_wib(), "checkin_photo": body.photo,
+    photo_url = await store_photo(body.photo, "attendance", rider["id"])
+    doc = {"id": uid(), "rider_id": rider["id"], "rider_name": rider["name"], "date": body.date, "checkin_at": now_iso(), "checkin_time": now_wib(), "checkin_photo": photo_url,
            "checkout_at": None, "checkout_time": None, "checkout_photo": None, "lat": body.lat, "lng": body.lng}
     await db.attendance.insert_one(doc)
     if body.lat is not None:
@@ -633,7 +720,7 @@ async def checkout(body: AttendanceIn, u=Depends(ANY)):
         raise HTTPException(404, "No check-in found today")
     if att.get("checkout_at"):
         raise HTTPException(409, "Already checked out today")
-    await db.attendance.update_one({"id": att["id"]}, {"$set": {"checkout_at": now_iso(), "checkout_time": now_wib(), "checkout_photo": body.photo}})
+    await db.attendance.update_one({"id": att["id"]}, {"$set": {"checkout_at": now_iso(), "checkout_time": now_wib(), "checkout_photo": await store_photo(body.photo, "attendance", rider["id"])}})
     doc = await db.attendance.find_one({"id": att["id"]}, NOID)
     await gs_sync("attendance", {**doc, "event": "checkout"}, body.photo, f"checkout_{rider['name']}_{body.date}.jpg")
     return doc
@@ -662,6 +749,7 @@ async def save_rider_stock(body: RiderStockIn, u=Depends(STAFF)):
     photo = body.photo or (prev or {}).get("photo")
     if not photo:
         raise HTTPException(400, "Photo evidence is required")
+    photo = await store_photo(photo, "rider_stock", rider["id"])
     prev_items = prev["items"] if prev else {}
     menus = {m["id"]: m for m in await db.menus.find({}, NOID).to_list(100)}
     for mid, qty in body.items.items():

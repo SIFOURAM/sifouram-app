@@ -45,6 +45,9 @@ Advanced coffee-cart business OS (POS, inventory w/ recipes, menu stock, rider s
 - AI Sales Coach (gpt-5.4-mini via Emergent key, POST /coach/chat): rider GPS → OpenStreetMap Overpass POIs (3 mirrors) + Nominatim area → coaching reply; floating chat for riders; history in coach_chats
 - GPS mandatory gate for riders (GpsGate); withdrawals create superadmin notifications (bell in header) + withdrawal receipt with WA to superadmin; rider bank account (22 Indonesian banks dropdown) in Profile
 
+## Revision 3 (2026-06) — File & media storage
+- Emergent Object Storage integrated (server.py: init_storage/put_object/get_object/store_photo). All uploaded photos (attendance check-in/out, rider stock evidence, profile, menu) are uploaded to bucket path `sifouram/{folder}/{user_id}/{uuid}.ext`, referenced in `db.files` (soft-delete), and served via GET /api/files/{path} (public by unguessable UUID path, cached). Falls back to inline base64 if storage fails. GET /api/files (staff list), DELETE /api/files/{path} (superadmin soft-delete).
+
 ## Backlog / P1-P2
 - Google Drive photo storage (needs OAuth credentials) · Google Maps (needs API key)
 - V2: AI demand forecasting, Bluetooth thermal printing, WA auto-broadcast marketing
