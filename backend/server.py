@@ -134,6 +134,9 @@ class ProfileIn(BaseModel):
     photo: Optional[str] = None
     joined_at: Optional[str] = None
     placement: Optional[str] = None
+    bank_name: Optional[str] = None
+    bank_account: Optional[str] = None
+    bank_holder: Optional[str] = None
 
 
 class PasswordIn(BaseModel):
@@ -451,6 +454,8 @@ async def list_users(role: Optional[str] = None, u=Depends(ANY)):
     if u["role"] == "rider":
         q = {"role": "rider"}
     users = await db.users.find(q, {"_id": 0, "password_hash": 0, "pin_hash": 0}).to_list(200)
+    if u["role"] == "rider" and role == "superadmin":
+        users = await db.users.find({"role": "superadmin"}, {"_id": 0, "id": 1, "name": 1, "whatsapp": 1, "role": 1}).to_list(10)
     return users
 
 
@@ -1039,10 +1044,88 @@ async def create_withdrawal(body: WithdrawalIn, start: str, end: str, u=Depends(
     avail = rs["allowance_available"] if body.type == "allowance" else rs["incentive_available"]
     if body.amount <= 0 or body.amount > avail + 0.01:
         raise HTTPException(400, f"Amount exceeds available balance ({avail:.0f})")
-    doc = {**body.model_dump(), "id": uid(), "rider_name": rs["rider_name"], "time": now_wib(), "period_start": start, "period_end": end, "approved_by": u["name"], "created_at": now_iso()}
+    doc = {**body.model_dump(), "id": uid(), "rider_name": rs["rider_name"], "time": now_wib(), "period_start": start, "period_end": end, "approved_by": u["name"],
+           "bank_name": u.get("bank_name"), "bank_account": u.get("bank_account"), "bank_holder": u.get("bank_holder"), "created_at": now_iso()}
     await db.withdrawals.insert_one(doc)
     doc.pop("_id", None)
+    await db.notifications.insert_one({"id": uid(), "for_role": "superadmin", "type": "withdrawal", "title": f"{'Uang Harian' if body.type == 'allowance' else 'Insentif'} · {rs['rider_name']}",
+                                       "body": f"Rp {body.amount:,.0f} via {body.method.upper()} · {body.date} {doc['time']}", "ref_id": doc["id"], "read": False, "created_at": now_iso()})
     await gs_sync("withdrawals", doc)
+    return doc
+
+
+@api.get("/notifications")
+async def list_notifications(u=Depends(SUPER)):
+    return await db.notifications.find({"for_role": "superadmin"}, NOID).sort("created_at", -1).limit(30).to_list(30)
+
+
+@api.post("/notifications/read")
+async def read_notifications(u=Depends(SUPER)):
+    await db.notifications.update_many({"for_role": "superadmin", "read": False}, {"$set": {"read": True}})
+    return {"ok": True}
+
+
+# ---------- AI Sales Coach ----------
+class CoachIn(BaseModel):
+    message: str
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+
+
+def _overpass(lat: float, lng: float):
+    q = f"""[out:json][timeout:8];(node(around:1500,{lat},{lng})[amenity~"school|university|college|hospital|marketplace|bus_station|place_of_worship|office|food_court"];node(around:1500,{lat},{lng})[shop~"mall|supermarket|department_store"];node(around:1500,{lat},{lng})[leisure~"park|sports_centre|stadium"];node(around:1500,{lat},{lng})[railway=station];node(around:1500,{lat},{lng})[public_transport=station];);out 25;"""
+    hdr = {"User-Agent": "SIFOURAM/1.0"}
+    for url in ("https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter", "https://overpass.kumi.systems/api/interpreter"):
+        try:
+            r = requests.post(url, data={"data": q}, timeout=8, headers=hdr)
+            if r.status_code != 200:
+                continue
+            out = []
+            for e in r.json().get("elements", []):
+                t = e.get("tags", {})
+                if t.get("name"):
+                    out.append({"name": t["name"], "type": t.get("amenity") or t.get("shop") or t.get("leisure") or t.get("railway") or t.get("public_transport"), "lat": e["lat"], "lng": e["lon"]})
+            return out[:15]
+        except Exception:
+            continue
+    return []
+
+
+def _area_name(lat: float, lng: float) -> str:
+    try:
+        r = requests.get("https://nominatim.openstreetmap.org/reverse", params={"lat": lat, "lon": lng, "format": "json", "zoom": 16}, timeout=6, headers={"User-Agent": "SIFOURAM/1.0"}).json()
+        a = r.get("address", {})
+        return ", ".join(x for x in [a.get("neighbourhood") or a.get("suburb"), a.get("city_district") or a.get("village"), a.get("city") or a.get("county")] if x)
+    except Exception:
+        return ""
+
+
+@api.get("/coach/history")
+async def coach_history(u=Depends(ANY)):
+    return await db.coach_chats.find({"user_id": u["id"]}, NOID).sort("created_at", -1).limit(30).to_list(30)
+
+
+@api.post("/coach/chat")
+async def coach_chat(body: CoachIn, u=Depends(ANY)):
+    from emergentintegrations.llm.chat import LlmChat, UserMessage
+    d = datetime.now(WIB).strftime("%Y-%m-%d")
+    st = await pos_stock(u["id"], d) if u["role"] == "rider" else {"items": []}
+    sold = sum(i["sold"] for i in st["items"])
+    remaining = ", ".join(f"{i['name']} {i['remaining']}" for i in st["items"] if i["remaining"] > 0) or "-"
+    pois = _overpass(body.lat, body.lng) if body.lat is not None else []
+    area = _area_name(body.lat, body.lng) if body.lat is not None else ""
+    poi_txt = "\n".join(f"- {p['name']} ({p['type']})" for p in pois) or ("(daftar POI tidak tersedia — gunakan pengetahuan umum tentang area " + (area or "sekitar rider") + ": sekolah, pasar, kantor, stasiun, masjid, taman, kos-kosan)")
+    hist = await db.coach_chats.find({"user_id": u["id"]}, NOID).sort("created_at", -1).limit(6).to_list(6)
+    hist_txt = "\n".join(f"Rider: {h['message']}\nCoach: {h['reply'][:300]}" for h in reversed(hist))
+    system = ("Kamu adalah 'Coach SI FOUR AM', pelatih penjualan kopi gerobak keliling (Rp5.000–12.000/cup) yang hangat, energik, dan sangat praktis. "
+              "Jawab dalam Bahasa Indonesia santai-semangat, padat (maks ±180 kata), pakai bullet & emoji secukupnya. Selalu berikan: (1) 2–3 lokasi ramai TERDEKAT dari daftar POI dengan alasan & jam terbaik, "
+              "(2) 1 taktik jualan konkret (sapaan, promo bundling 4 cup Rp45.000 / 10 cup Rp110.000, upsell), (3) kalimat penyemangat menuju target 50 cup (kategori: ≤30 Semangat, 31–49 Hampir, ≥50 Tembus). "
+              f"\nKONTEKS: waktu {datetime.now(WIB).strftime('%A %H:%M')} WIB. Lokasi rider: {area or 'tidak diketahui'}. Rider {u['name']}. Terjual hari ini {sold} cup (target 50). Sisa stok: {remaining}.\nPOI radius 1,5 km:\n{poi_txt}\n\nRiwayat:\n{hist_txt}")
+    chat = LlmChat(api_key=os.environ["EMERGENT_LLM_KEY"], session_id=f"coach-{u['id']}", system_message=system).with_model("openai", "gpt-5.4-mini")
+    reply = await chat.send_message(UserMessage(text=body.message))
+    doc = {"id": uid(), "user_id": u["id"], "message": body.message, "reply": reply, "pois": pois, "area": area, "sold": sold, "created_at": now_iso()}
+    await db.coach_chats.insert_one(doc)
+    doc.pop("_id", None)
     return doc
 
 

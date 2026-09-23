@@ -9,7 +9,8 @@ import { PageHeader, Bento, Field } from "../components/common";
 export default function Profile() {
   const { t } = useT();
   const { user, setUser, logout } = useAuth();
-  const [f, setF] = useState({ name: user.name, whatsapp: user.whatsapp, email: user.email, joined_at: user.joined_at || "", placement: user.placement || "" });
+  const [f, setF] = useState({ name: user.name, whatsapp: user.whatsapp, email: user.email, joined_at: user.joined_at || "", placement: user.placement || "", bank_name: user.bank_name || "", bank_account: user.bank_account || "", bank_holder: user.bank_holder || "" });
+  const BANKS = ["Bank BCA", "Bank Mandiri (Livin')", "Bank BRI (BRImo)", "Bank BNI (wondr)", "Bank BTN (Bale)", "CIMB Niaga (OCTO Mobile)", "Bank Danamon (D-Bank PRO)", "Bank Permata (PermataMobile X)", "OCBC Indonesia (OCBC mobile)", "Bank Syariah Indonesia (BYOND)", "Bank Jago", "Bank Neo Commerce (neobank)", "Allo Bank", "SeaBank", "blu by BCA Digital", "LINE Bank", "Jenius", "MotionBank", "Bank Raya", "Bank Saqu", "Superbank", "TMRW by UOB"];
   const [pw, setPw] = useState({ old_password: "", new_password: "" });
   const [pin, setPin] = useState({ password: "", new_pin: "" });
 
@@ -42,7 +43,11 @@ export default function Profile() {
             <Field label="Email"><input data-testid="profile-email-input" className="field" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></Field>
             <Field label="WhatsApp"><input data-testid="profile-wa-input" className="field" value={f.whatsapp} onChange={(e) => setF({ ...f, whatsapp: e.target.value })} /></Field>
             {user.role === "rider" && <><Field label="Joined date"><input type="date" className="field" value={f.joined_at} onChange={(e) => setF({ ...f, joined_at: e.target.value })} /></Field>
-              <Field label="Placement"><input className="field" value={f.placement} onChange={(e) => setF({ ...f, placement: e.target.value })} /></Field></>}
+              <Field label="Placement"><input className="field" value={f.placement} onChange={(e) => setF({ ...f, placement: e.target.value })} /></Field>
+              <p className="eyebrow pt-2">Rekening Bank</p>
+              <Field label="Bank"><select data-testid="profile-bank-select" className="field" value={f.bank_name} onChange={(e) => setF({ ...f, bank_name: e.target.value })}><option value="">— pilih bank —</option>{BANKS.map((b) => <option key={b} value={b}>{b}</option>)}</select></Field>
+              <div className="grid grid-cols-2 gap-3"><Field label="No. Rekening"><input data-testid="profile-bank-account" className="field num" value={f.bank_account} onChange={(e) => setF({ ...f, bank_account: e.target.value })} /></Field>
+                <Field label="Atas Nama"><input data-testid="profile-bank-holder" className="field" value={f.bank_holder} onChange={(e) => setF({ ...f, bank_holder: e.target.value })} /></Field></div></>}
             <button data-testid="profile-save-button" className="btn-primary w-full">{t("save")}</button>
           </form>
         </Bento>

@@ -5,6 +5,23 @@ import { useAuth } from "../context/AuthContext";
 import { useT } from "../lib/i18n";
 import { api } from "../lib/api";
 import { initials } from "../lib/helpers";
+import CoachChat from "./CoachChat";
+import GpsGate from "./GpsGate";
+import { Bell } from "lucide-react";
+
+function NotifBell() {
+  const [list, setList] = useState([]);
+  const [open, setOpen] = useState(false);
+  const load = () => api.get("/notifications").then((r) => setList(r.data)).catch(() => {});
+  useEffect(() => { load(); const id = setInterval(load, 30000); return () => clearInterval(id); }, []);
+  const unread = list.filter((n) => !n.read).length;
+  return (
+    <div className="relative">
+      <button data-testid="notif-bell" onClick={() => { setOpen(!open); if (unread) api.post("/notifications/read").then(load); }} className="p-2 rounded-lg hover:bg-muted relative"><Bell className="w-4 h-4" />{unread > 0 && <span data-testid="notif-count" className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">{unread}</span>}</button>
+      {open && <div data-testid="notif-list" className="absolute right-0 top-11 w-72 max-h-80 overflow-y-auto bento gold p-2 z-50 fade-up">{list.map((n) => <div key={n.id} className={`p-2 rounded-lg text-xs ${n.read ? "" : "bg-primary/10"}`}><p className="font-semibold">{n.title}</p><p className="text-muted-foreground">{n.body}</p></div>)}{!list.length && <p className="text-xs text-muted-foreground p-3 text-center">—</p>}</div>}
+    </div>
+  );
+}
 
 const I = { dashboard: LayoutDashboard, inventory: Boxes, menuStock: Layers, pos: ShoppingCart, riderStock: Bike, deposit: Wallet, invoice: FileText, riderDash: Gauge, handover: HandCoins, finance: LineChart, salary: BadgeDollarSign, settings: Cog, customers: Users };
 const item = (to, key) => ({ to, key, icon: I[key] });
@@ -52,6 +69,7 @@ export default function Layout() {
   const ThemeBtn = ({ id }) => <button data-testid={id} onClick={() => setTheme(theme === "dark" ? "light" : "dark")} className="p-2 rounded-lg hover:bg-muted">{theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}</button>;
 
   return (
+    <GpsGate role={user.role}>
     <div className="min-h-screen flex">
       <aside className="hidden lg:flex flex-col w-64 xl:w-72 border-r border-border/70 p-6 sticky top-0 h-screen overflow-y-auto" data-testid="sidebar">
         <div className="flex items-center gap-3 mb-8">
@@ -71,12 +89,14 @@ export default function Layout() {
           <div className="flex items-center gap-2 lg:hidden"><div className="w-8 h-8 rounded-xl bg-primary text-white flex items-center justify-center font-black text-sm font-heading">S4</div><span className="font-heading font-bold">SI FOUR AM</span></div>
           <div className="hidden lg:block"><p className="eyebrow">{roleLabel}</p></div>
           <div className="flex items-center gap-2">
+            {user.role === "superadmin" && <NotifBell />}
             <ThemeBtn id="theme-toggle-button" />
             <div className="text-right hidden sm:block"><p className="text-sm font-semibold leading-tight">{user.name}</p><p className="text-[11px] text-muted-foreground">@{user.username}</p></div>
             <Avatar />
           </div>
         </header>
         <main className="flex-1 p-4 pb-28 lg:p-8 lg:pb-8 max-w-[1400px] w-full mx-auto min-w-0"><Outlet /></main>
+        {user.role === "rider" && <CoachChat />}
 
         {moreOpen && <div className="lg:hidden fixed inset-0 z-40 bg-black/40" onClick={() => setMoreOpen(false)} />}
         <nav className="lg:hidden fixed bottom-0 inset-x-0 z-50 bg-background/90 backdrop-blur-xl border-t border-border/70" data-testid="bottom-nav">
@@ -97,5 +117,6 @@ export default function Layout() {
         </nav>
       </div>
     </div>
+    </GpsGate>
   );
 }

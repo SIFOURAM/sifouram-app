@@ -9,7 +9,7 @@ import { api, errMsg } from "../lib/api";
 import { fmtRp, fmtDate, initials, today } from "../lib/helpers";
 import { useT } from "../lib/i18n";
 import { useAuth } from "../context/AuthContext";
-import { PageHeader, Bento, Stat, DateFilter, Select, Empty, Field } from "../components/common";
+import { PageHeader, Bento, Stat, DateFilter, Select, Empty, Field, ReceiptModal, RLine } from "../components/common";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 
 const COLORS = ["#FF6B00", "#D4AF37", "#f59e0b", "#fb923c", "#eab308", "#a16207", "#f97316", "#fbbf24", "#78350f"];
@@ -30,15 +30,25 @@ export function TierProgress({ s, count = 1 }) {
 
 function WithdrawDialog({ type, s, range, onClose, onDone }) {
   const { t } = useT();
-  const [f, setF] = useState({ method: "cash", amount: "", date: today(), note: "" });
+  const { user } = useAuth();
+  const [f, setF] = useState({ method: user.bank_name ? "bank" : "cash", amount: "", date: today(), note: "" });
   const [hist, setHist] = useState([]);
+  const [done, setDone] = useState(null);
+  const [admins, setAdmins] = useState([]);
   const avail = type === "allowance" ? s.allowance_available : s.incentive_available;
   const load = () => api.get("/withdrawals", { params: { ...range, rider_id: s.rider_id } }).then((r) => setHist(r.data.filter((w) => w.type === type)));
-  useEffect(() => { load(); }, []); // eslint-disable-line
+  useEffect(() => { load(); api.get("/users", { params: { role: "superadmin" } }).then((r) => setAdmins(r.data.filter((u) => u.role === "superadmin"))).catch(() => {}); }, []); // eslint-disable-line
   const submit = async () => {
-    try { await api.post("/withdrawals", { rider_id: s.rider_id, type, ...f, amount: Number(f.amount) }, { params: range }); toast.success(t("withdraw") + " ✓"); setF({ ...f, amount: "" }); load(); onDone(); }
+    try { const { data } = await api.post("/withdrawals", { rider_id: s.rider_id, type, ...f, amount: Number(f.amount) }, { params: range }); toast.success(t("withdraw") + " ✓"); setF({ ...f, amount: "" }); load(); onDone(); setDone(data); }
     catch (e) { toast.error(errMsg(e)); }
   };
+  const label = type === "allowance" ? "UANG HARIAN" : "INSENTIF";
+  const waText = done && `*SI FOUR AM — PENARIKAN ${label}*\n----------------------------------\n👤 *Rider:* ${done.rider_name}\n📅 *Tanggal:* ${fmtDate(done.date)} ${done.time} WIB\n💵 *Jumlah:* ${fmtRp(done.amount)}\n🏦 *Metode:* ${done.method === "bank" ? `Transfer Bank${done.bank_name ? ` — ${done.bank_name} ${done.bank_account || ""} a.n. ${done.bank_holder || done.rider_name}` : ""}` : "Cash"}\n📆 *Periode:* ${done.period_start} → ${done.period_end}\n📝 ${done.note || "-"}\n----------------------------------\nMohon diproses ya, terima kasih! 🙏`;
+  if (done) return (
+    <ReceiptModal open onClose={() => { setDone(null); onClose(); }} title={`Penarikan ${label}`} waText={waText} waPhone={admins[0]?.whatsapp} filename={`WD_${done.rider_name}_${done.date}.png`} testId="withdraw-receipt">
+      <RLine l="Rider" r={done.rider_name} /><RLine l={t("date")} r={`${fmtDate(done.date)} ${done.time}`} /><RLine l={t("method")} r={done.method === "bank" ? `Bank · ${done.bank_name || "-"}` : "Cash"} />{done.method === "bank" && <RLine l="No. Rek" r={`${done.bank_account || "-"} (${done.bank_holder || done.rider_name})`} />}<RLine l={t("period")} r={`${done.period_start} → ${done.period_end}`} />
+      <div className="border-t border-dashed border-gray-300 my-2" /><RLine bold l="JUMLAH" r={fmtRp(done.amount)} /><p className="text-[10px] text-gray-500 text-center mt-2">Kirim ke Superadmin: {admins[0]?.name}</p>
+    </ReceiptModal>);
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent data-testid="withdraw-dialog"><DialogHeader><DialogTitle>{t("withdraw")} · {type === "allowance" ? t("dailyAllowance") : t("incentive")}</DialogTitle></DialogHeader>

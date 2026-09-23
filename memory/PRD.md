@@ -39,6 +39,12 @@ Advanced coffee-cart business OS (POS, inventory w/ recipes, menu stock, rider s
 - Inventory: recipes include packaging (migration), PDF Excel-style with time, purchased item/supplier on IN
 - Google Sheets/Drive sync via Apps Script (google-apps-script/Code.gs + README), URL configurable in Settings (superadmin) or GOOGLE_APPS_SCRIPT_URL env. NOT active until user deploys and pastes URL.
 
+## Revision 2 (2026-06) — implemented
+- Responsive tables fit one screen 320–1920px (compact .qty selects, hide-xs/hide-sm columns, sold/diff inline on phones)
+- Customers & loyalty page (/customers, superadmin More) with WA voucher; POS daily target progress (50 cups); Bluetooth thermal print button (Web Bluetooth ESC/POS) in receipts; AI stock forecast (GET /forecast) on Rider Stock
+- AI Sales Coach (gpt-5.4-mini via Emergent key, POST /coach/chat): rider GPS → OpenStreetMap Overpass POIs (3 mirrors) + Nominatim area → coaching reply; floating chat for riders; history in coach_chats
+- GPS mandatory gate for riders (GpsGate); withdrawals create superadmin notifications (bell in header) + withdrawal receipt with WA to superadmin; rider bank account (22 Indonesian banks dropdown) in Profile
+
 ## Backlog / P1-P2
 - Google Drive photo storage (needs OAuth credentials) · Google Maps (needs API key)
 - V2: AI demand forecasting, Bluetooth thermal printing, WA auto-broadcast marketing
