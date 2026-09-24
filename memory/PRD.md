@@ -61,6 +61,12 @@ Advanced coffee-cart business OS (POS, inventory w/ recipes, menu stock, rider s
 - All page/tab TITLE texts removed — PageHeader now renders only action children (no eyebrow/h1).
 - One-time data wipe (backend/wipe_tx.py): emptied sales, deposits, rider_stock, eod, handovers, expenses, invoices, customers, inventory_tx, menu_stock_tx, notifications; reset materials.stock & menus.stock to 0 (item/menu definitions kept).
 
+## Revision 6 (2026-06) — 4 UX + i18n/appearance changes (tested: iteration_6.json, frontend 100%)
+- Date filter now single horizontal row, smaller buttons (h-7), horizontally scrollable (no wrap).
+- Tanya AI upgraded: LINE-style bubbles (user green right / AI left with avatar), WebAudio pop/bubble sound on reply, scroll holds at start of last message, history persists across open/close, manual box answers any question.
+- Global appearance controls in Settings > "Teks & Font" (lib/appearance.js): text size A-/A+ (--font-scale), bold toggle (body.app-bold), text color picker (overrides --foreground via hexToHsl), font-type from 12 Google fonts incl. Oswald(Athletic) & Noto Sans Javanese; persisted in localStorage, applied app-wide on load (App.js).
+- Languages expanded to 5: ID, EN, 日本語, 中文, العربية (Arabic sets dir=rtl). i18n dict en/id/ja/zh/ar.
+
 ## Backlog / P1-P2
 - Google Drive photo storage (needs OAuth credentials) · Google Maps (needs API key)
 - V2: AI demand forecasting, Bluetooth thermal printing, WA auto-broadcast marketing

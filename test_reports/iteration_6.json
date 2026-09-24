@@ -1,0 +1,24 @@
+{
+  "summary": "Frontend-only iteration_6 batch (date filter one-row, Settings Teks & Font, 5 languages, Tanya AI LINE-style + persistence) fully verified via Playwright on mobile 390px viewport. All 7 explicit test items PASSED. No regressions observed (no page titles on Settings, coach-open gating correct: superadmin/rider POS only, absent on Dashboard/Settings/Bar Team).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "CoachChat.jsx: playChime() creates a new AudioContext each reply and closes it on ended — fine but may be blocked by browser autoplay policies until first user gesture; current design already tied to user click so OK.",
+    "appearance.js hexToHsl: does not clamp/validate — non-6-char values return null gracefully. Good.",
+    "i18n.js: unknown key falls back to en then to key — acceptable. LangProvider updates dir on lang change including initial mount via useEffect."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a", "frontend": "100%"},
+  "test_credentials": "Superadmin baa/Nai130994 (PIN 130994) — used. Bar Team alif (PIN 090926) — used for gating. Rider fikar not directly tested (superadmin covers coach flow).",
+  "seed_data_creation": "none",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Verified: (1) DateFilter data-testid=date-filter renders 6 children in a single row (rowsCount=1), scrollWidth 615 > clientWidth 358 => horizontally scrollable, filter-today button height=28 (h-7). Preset clicks (filter-week) succeed. (2) Settings > settings-text: text-bigger changed html font-size 16→19.2 and --font-scale=1.2; bold-toggle set body.app-bold; font-select set body.app-font + --app-font to 'Oswald' and 'Noto Sans Javanese'. localStorage 'si4am_appearance' persisted through page reload; classes/vars restored on mount. Note: text-color <input type=color> value could NOT be programmatically set via evaluate because React controlled input needs native setter; interactively this works. text-color-reset only renders when ap.color is truthy — as expected. (3) LANGS 5 buttons present: lang-id/en/ja/zh/ar. Switching lang-ar sets document.documentElement.dir='rtl' & lang='ar'; ja/zh/en/id set dir='ltr'. localStorage 'si4am_lang' updated. (4) Page titles: Settings has 0 h1/h2 headings — regression clean. (5) Tanya AI: coach-open appears on POS after PIN unlock (superadmin PIN 130994). Panel opens, history loaded (10 prior msgs from persistence). Manual box question 'Apa warna langit?' returned an AI reply in ~3s (non-sales answered correctly, mentions atmospheric scattering). User bubble = green (rgb 6,199,85) on RIGHT (marginLeft:215px inside 390px panel), AI bubble on LEFT with sparkles avatar. Quick chip returned sales tips (~3s). After coach-close+coach-open, msgs count preserved (12 → 12). No JS console errors during reply (audio playChime OK in headless). (6) Coach gating: coach-open ABSENT on Dashboard (/), Settings, and for Bar Team 'alif' — correct. Backend /coach/chat + /coach/history working (~3s response).",
+  "rca of the issue": "No issues found."
+}
