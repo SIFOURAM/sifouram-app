@@ -1,0 +1,34 @@
+{
+  "summary": "Iteration_7 batch (~9 changes) tested end-to-end. Backend: 6/6 pytest tests PASS. Frontend: text-size clamp (0.5/1.5) + header/footer rem scaling verified, header hide-on-scroll DOWN/show-on-UP verified, primary bank persistence verified after profile save+reload, superadmin salary-photo file inputs present for all riders, coach chat user bubble is now ORANGE rgb(255,106,0) (bg-primary) — no longer green, order notification created + fetched via /api/notifications when POST /api/invoices as superadmin.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter7_batch.py",
+    "/app/test_reports/pytest/iter7.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py update_user_photo (PUT /users/{uid}/photo) correctly gated by SUPER dep — 403 verified for non-super caller.",
+    "create_invoice inserts a superadmin notification with type='order' and title 'Pesanan Barang · <customer>' — confirmed via GET /api/notifications after POST /api/invoices.",
+    "finance/summary requires start & end query params (422 otherwise) — expected; tests updated to pass a broad range.",
+    "Salary rows have `total_income = allowance + incentive` which is always >= 0 by construction. If a rider previously had leftover withdrawals wiped, allowance_available/incentive_available in output could still be negative if withdrawals remain > earnings; fikar rider currently 0 ✅.",
+    "Layout.jsx hide-on-scroll (hideHead) works on window scroll — confirmed toggling -translate-y-full class on top-header when scrolling body content.",
+    "Profile.jsx bank-primary-{i} correctly maps to setting exactly one bank primary; persists after save+reload (verified for fikar).",
+    "CoachChat.jsx user bubble uses bg-primary — computed color rgb(255,106,0), no green residue.",
+    "Withdraw dialog (RiderDashboard) not automatically end-to-end verified because the Tarik/withdraw entry point was not visible on the rider dashboard (fikar) via mobile 390 viewport during test — likely gated by presence of available balance or a role-specific page state. bank_idx default to primary is code-verified in RiderDashboard.jsx; runtime opening of the dialog needs manual/main-agent verification."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter7_batch.py (new)"
+  ],
+  "success_rate": {"backend": "100% (6/6)", "frontend": "6/7 explicit items verified (Withdraw select default not opened due to no Tarik button visible in headless test session — code path is correct)"},
+  "test_credentials": "superadmin baa/Nai130994 (PIN 130994) and rider fikar/Jkt221112 (PIN 211122) — both used successfully.",
+  "seed_data_creation": "TEST_Notif invoices + 'order' notifications created and cleaned up by the invoice-notification test (Mongo cleanup inside test). TEST_ bank rows added on fikar profile during primary-bank test (2 rows) and left in place after successful save — main agent may reset if needed.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Verified (i7): (1) TEXT SIZE — Settings [data-testid=text-bigger/text-smaller]: font-scale clamps at 1.5 max and 0.5 min. Header (top-header) height 64→96 & fontSize 16px→24px; bottom-nav span fontSize 8.8px→13.2px (both exactly 1.5x — rem scaling works). localStorage 'si4am_appearance' persists across reload. (2) HEADER HIDE ON SCROLL — /salary page: window.scrollTo(0,800) → top-header gets '-translate-y-full'; scrollTo(0,200) removes it. Works via window scroll. (3) RESET DATA — GET /api/finance/summary?start=2020-01-01&end=2030-12-31 returns outgo=0 cash_balance=0 bank_balance=0 (income=0 after cleanup of test invoices). GET /api/salary returns fikar total_income=0 (allowance=0 incentive=0), no negative -20000. (4) PRIMARY BANK — Profile bank-primary-1 click sets '★ Utama', persists after save+reload. Withdraw select default (in dialog) not opened live because the Tarik button was not surfaced on fikar's default dashboard route in headless mobile test — RECOMMEND main agent verify visually. (5) SUPER SALARY PHOTO — 5 salary-photo-{rider_id} <input type=file> inputs rendered as superadmin; PUT /api/users/{uid}/photo returns {photo:<url>} for super, 403 for rider (verified). (6) ORDER NOTIFICATION — POST /api/invoices inserts notification type='order' with title starting 'Pesanan Barang · '; visible in GET /api/notifications. (7) COACH ORANGE — [data-testid=chat-user] backgroundColor rgb(255,106,0) after send; no green. POS coach-open requires PIN unlock (used 130994) and geolocation permission granted via playwright context. WebAudio tri-tone chime not verifiable headless (design accepted). (8) Auth: /api/auth/login by identifier (username) works; profile update via PUT /api/auth/profile with {banks:[...]} correctly saves the 'primary' boolean flag.",
+  "rca of the issue": "n/a — no bugs found in this iteration."
+}

@@ -67,6 +67,16 @@ Advanced coffee-cart business OS (POS, inventory w/ recipes, menu stock, rider s
 - Global appearance controls in Settings > "Teks & Font" (lib/appearance.js): text size A-/A+ (--font-scale), bold toggle (body.app-bold), text color picker (overrides --foreground via hexToHsl), font-type from 12 Google fonts incl. Oswald(Athletic) & Noto Sans Javanese; persisted in localStorage, applied app-wide on load (App.js).
 - Languages expanded to 5: ID, EN, 日本語, 中文, العربية (Arabic sets dir=rtl). i18n dict en/id/ja/zh/ar.
 
+## Revision 7 (2026-06) — 9 UX/data changes (tested: iteration_7.json, backend 6/6, frontend 6/7)
+- Text-size now scales header + footer too (px→rem in Layout); range clamped 50%–150%.
+- Leftover data reset to 0: deleted remaining withdrawals/expenses → finance income/outgo/net/cash/bank all 0; Muhammad Zulfikar no longer -20.000.
+- Rekening Utama: banks[] gains `primary` flag (Profile bank-primary-{i}); WithdrawDialog defaults to primary bank.
+- Header auto-hides on scroll down / shows on scroll up (Layout hideHead + window scroll).
+- Superadmin can change rider photo from Salary tab (salary-photo-{id} → PUT /users/{id}/photo, superadmin-gated).
+- Notifications: iPhone-style WebAudio tri-tone on new unread; new 'order' notification when an invoice is created (create_invoice).
+- Kasir AI chat user bubble green(#06C755) → orange (bg-primary).
+- JA/ZH/AR dictionaries complete for all t() keys.
+
 ## Backlog / P1-P2
 - Google Drive photo storage (needs OAuth credentials) · Google Maps (needs API key)
 - V2: AI demand forecasting, Bluetooth thermal printing, WA auto-broadcast marketing
