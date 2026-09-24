@@ -1,7 +1,9 @@
 import "@/App.css";
+import { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { RotateCcw } from "lucide-react";
 import { Toaster } from "./components/ui/sonner";
+import { applyAppearance, getAppearance } from "./lib/appearance";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { LangProvider } from "./lib/i18n";
 import Layout, { HOME } from "./components/Layout";
@@ -63,6 +65,7 @@ function Shell() {
 }
 
 export default function App() {
+  useEffect(() => { applyAppearance(getAppearance()); }, []);
   return (
     <LangProvider>
       <AuthProvider>

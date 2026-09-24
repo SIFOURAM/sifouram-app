@@ -51,16 +51,16 @@ export function DateFilter({ onChange, showCustom = true }) {
   useEffect(() => { onChange(rangeFor(preset, custom), preset); }, [preset, custom]); // eslint-disable-line
   const presets = ["today", "yesterday", "week", "month", "prevmonth"];
   return (
-    <div className="flex flex-wrap gap-2 items-center" data-testid="date-filter">
+    <div className="flex flex-nowrap gap-1.5 items-center overflow-x-auto no-scrollbar -mx-1 px-1 pb-1 w-full" data-testid="date-filter">
       {presets.map((p) => (
         <button key={p} data-testid={`filter-${p}`} onClick={() => setPreset(p)}
-          className={`h-9 px-4 rounded-full text-xs font-semibold transition-colors ${preset === p ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/70"}`}>{t(p)}</button>
+          className={`shrink-0 h-7 px-2.5 rounded-full text-[11px] font-semibold transition-colors ${preset === p ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/70"}`}>{t(p)}</button>
       ))}
       {showCustom && (
-        <div className="flex gap-1 items-center">
-          <input data-testid="filter-custom-start" type="date" className="field h-9 w-36 text-xs" value={custom.start} onChange={(e) => { setCustom({ ...custom, start: e.target.value }); setPreset("custom"); }} />
-          <span className="text-muted-foreground text-xs">→</span>
-          <input data-testid="filter-custom-end" type="date" className="field h-9 w-36 text-xs" value={custom.end} onChange={(e) => { setCustom({ ...custom, end: e.target.value }); setPreset("custom"); }} />
+        <div className="flex gap-1 items-center shrink-0">
+          <input data-testid="filter-custom-start" type="date" className="field h-7 w-[116px] text-[11px] px-2" value={custom.start} onChange={(e) => { setCustom({ ...custom, start: e.target.value }); setPreset("custom"); }} />
+          <span className="text-muted-foreground text-[11px]">→</span>
+          <input data-testid="filter-custom-end" type="date" className="field h-7 w-[116px] text-[11px] px-2" value={custom.end} onChange={(e) => { setCustom({ ...custom, end: e.target.value }); setPreset("custom"); }} />
         </div>
       )}
     </div>

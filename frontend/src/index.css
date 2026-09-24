@@ -118,3 +118,19 @@ html, body, #root { max-width: 100%; overflow-x: hidden; overscroll-behavior-x: 
 @media screen and (max-width: 900px) and (orientation: landscape) {
   .rotate-lock { display: flex; }
 }
+
+/* Global appearance controls (Settings > Text & Font) */
+:root { --font-scale: 1; --app-font: 'Plus Jakarta Sans', sans-serif; }
+html { font-size: calc(100% * var(--font-scale)); }
+body.app-font, body.app-font h1, body.app-font h2, body.app-font h3, body.app-font h4, body.app-font .font-heading { font-family: var(--app-font) !important; }
+body.app-bold, body.app-bold p, body.app-bold span, body.app-bold a, body.app-bold td, body.app-bold th, body.app-bold li, body.app-bold label, body.app-bold input, body.app-bold button, body.app-bold h1, body.app-bold h2, body.app-bold h3, body.app-bold h4 { font-weight: 600 !important; }
+
+/* Hide scrollbars for one-line scroll rows */
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* Chat bubbles (LINE-style) */
+.chat-pop { animation: chatPop .28s ease both; }
+@keyframes chatPop { from { opacity: 0; transform: translateY(6px) scale(.98); } to { opacity: 1; transform: none; } }
+.chat-dot { width: 6px; height: 6px; border-radius: 9999px; background: hsl(var(--muted-foreground)); display: inline-block; animation: chatBounce .9s infinite ease-in-out; }
+@keyframes chatBounce { 0%, 80%, 100% { transform: scale(.6); opacity: .4; } 40% { transform: scale(1); opacity: 1; } }
