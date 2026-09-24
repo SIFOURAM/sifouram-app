@@ -32,7 +32,8 @@ function WithdrawDialog({ type, s, range, onClose, onDone }) {
   const { t } = useT();
   const { user } = useAuth();
   const banks = s.banks || [];
-  const [f, setF] = useState({ method: banks.length ? "bank" : "cash", amount: "", date: today(), note: "", bank_idx: 0 });
+  const primaryIdx = Math.max(0, banks.findIndex((b) => b.primary));
+  const [f, setF] = useState({ method: banks.length ? "bank" : "cash", amount: "", date: today(), note: "", bank_idx: primaryIdx });
   const [hist, setHist] = useState([]);
   const [done, setDone] = useState(null);
   const [admins, setAdmins] = useState([]);

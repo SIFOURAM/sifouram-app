@@ -1049,6 +1049,8 @@ async def create_invoice(body: InvoiceIn, u=Depends(SUPER)):
     await db.invoices.insert_one(doc)
     doc.pop("_id", None)
     await gs_sync("invoices", {**doc, "rows": "; ".join(f"{r['name']} x{r['qty']}" for r in rows), "payments": str(doc["payments"])})
+    await db.notifications.insert_one({"id": uid(), "for_role": "superadmin", "type": "order", "title": f"Pesanan Barang · {doc['customer_name'] or '-'}",
+                                       "body": f"{doc['invoice_no']} · {doc['cups']} item · Rp {int(total):,}".replace(",", "."), "ref_id": doc["id"], "read": False, "created_at": now_iso()})
     return doc
 
 
@@ -1179,6 +1181,17 @@ async def read_notifications(u=Depends(SUPER)):
 async def clear_notifications(u=Depends(SUPER)):
     await db.notifications.delete_many({"for_role": "superadmin"})
     return {"ok": True}
+
+
+class PhotoIn(BaseModel):
+    photo: str
+
+
+@api.put("/users/{uid}/photo")
+async def update_user_photo(uid: str, body: PhotoIn, u=Depends(SUPER)):
+    url = await store_photo(body.photo, "profiles", uid)
+    await db.users.update_one({"id": uid}, {"$set": {"photo": url}})
+    return {"photo": url}
 
 
 # ---------- AI Sales Coach ----------

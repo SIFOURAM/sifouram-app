@@ -7,11 +7,33 @@ import { api } from "../lib/api";
 import { initials } from "../lib/helpers";
 import GpsGate from "./GpsGate";
 
+function playTriTone() {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    const ctx = new AC();
+    [[1318, 0], [1760, 0.13], [1975, 0.26]].forEach(([f, off]) => {
+      const o = ctx.createOscillator(); const g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination); o.type = "sine";
+      const s = ctx.currentTime + off;
+      o.frequency.setValueAtTime(f, s);
+      g.gain.setValueAtTime(0.0001, s); g.gain.exponentialRampToValueAtTime(0.25, s + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, s + 0.15);
+      o.start(s); o.stop(s + 0.17);
+    });
+    setTimeout(() => ctx.close(), 700);
+  } catch { /* no audio */ }
+}
+
 function NotifBell() {
   const [list, setList] = useState([]);
   const [open, setOpen] = useState(false);
-  const load = () => api.get("/notifications").then((r) => setList(r.data)).catch(() => {});
-  useEffect(() => { load(); const id = setInterval(load, 30000); return () => clearInterval(id); }, []);
+  const prevUnread = useRef(null);
+  const load = () => api.get("/notifications").then((r) => {
+    setList(r.data);
+    const un = r.data.filter((n) => !n.read).length;
+    if (prevUnread.current !== null && un > prevUnread.current) playTriTone();
+    prevUnread.current = un;
+  }).catch(() => {});
+  useEffect(() => { load(); const id = setInterval(load, 20000); return () => clearInterval(id); }, []);
   const unread = list.filter((n) => !n.read).length;
   const clearAll = () => api.post("/notifications/clear").then(() => { setList([]); setOpen(false); }).catch(() => {});
   return (
@@ -64,6 +86,13 @@ export default function Layout() {
   const nav = useNavigate();
   const loc = useLocation();
   const [moreOpen, setMoreOpen] = useState(false);
+  const [hideHead, setHideHead] = useState(false);
+  const lastY = useRef(0);
+  useEffect(() => {
+    const onScroll = () => { const y = window.scrollY; setHideHead(y > lastY.current && y > 80); lastY.current = y; };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
   useRiderGps(user);
   useEffect(() => setMoreOpen(false), [loc.pathname]);
   const { main, more } = NAV[user.role] || { main: [], more: [] };
@@ -95,13 +124,13 @@ export default function Layout() {
       </aside>
 
       <div className="flex-1 min-w-0 flex flex-col">
-        <header className="flex items-center justify-between px-4 lg:px-8 h-16 border-b border-border/70 sticky top-0 bg-background/80 backdrop-blur-xl z-40" data-testid="top-header">
+        <header className={`flex items-center justify-between px-4 lg:px-8 h-16 border-b border-border/70 sticky top-0 bg-background/80 backdrop-blur-xl z-40 transition-transform duration-300 ${hideHead ? "-translate-y-full" : "translate-y-0"}`} data-testid="top-header">
           <div className="flex items-center gap-2 lg:hidden"><img src="/logo.png" alt="SI FOUR AM" className="w-8 h-8 rounded-xl object-contain" /><span className="font-heading font-bold">SI FOUR AM</span></div>
           <div className="hidden lg:block"><p className="eyebrow">{roleLabel}</p></div>
           <div className="flex items-center gap-2">
             {user.role === "superadmin" && <NotifBell />}
             <ThemeBtn id="theme-toggle-button" />
-            <div className="text-right hidden sm:block"><p className="text-sm font-semibold leading-tight">{user.name}</p><p className="text-[11px] text-muted-foreground">@{user.username}</p></div>
+            <div className="text-right hidden sm:block"><p className="text-sm font-semibold leading-tight">{user.name}</p><p className="text-[0.7rem] text-muted-foreground">@{user.username}</p></div>
             <Avatar />
           </div>
         </header>
@@ -116,12 +145,12 @@ export default function Layout() {
           <div className="flex justify-around px-1 py-1.5 pb-[max(env(safe-area-inset-bottom),6px)]">
             {main.map((i) => (
               <NavLink key={i.to} to={i.to} end={i.to === "/"} data-testid={`bottomnav-${i.key}`}
-                className={({ isActive }) => `flex flex-col items-center gap-0.5 px-1.5 py-1 rounded-xl text-[8px] font-semibold min-w-0 flex-1 transition-colors ${isActive ? "text-primary" : "text-muted-foreground"}`}>
-                <i.icon className="w-[15px] h-[15px]" /><span className="truncate w-full text-center">{t(i.key)}</span>
+                className={({ isActive }) => `flex flex-col items-center gap-0.5 px-1.5 py-1 rounded-xl text-[0.55rem] font-semibold min-w-0 flex-1 transition-colors ${isActive ? "text-primary" : "text-muted-foreground"}`}>
+                <i.icon className="w-[0.95rem] h-[0.95rem]" /><span className="truncate w-full text-center">{t(i.key)}</span>
               </NavLink>))}
             {more.length > 0 && (
-              <button data-testid="bottomnav-more" onClick={() => setMoreOpen(!moreOpen)} className={`flex flex-col items-center gap-0.5 px-1.5 py-1 text-[8px] font-semibold flex-1 ${moreActive || moreOpen ? "text-primary" : "text-muted-foreground"}`}>
-                <MoreHorizontal className="w-[15px] h-[15px]" /><span>{t("more")}</span></button>)}
+              <button data-testid="bottomnav-more" onClick={() => setMoreOpen(!moreOpen)} className={`flex flex-col items-center gap-0.5 px-1.5 py-1 text-[0.55rem] font-semibold flex-1 ${moreActive || moreOpen ? "text-primary" : "text-muted-foreground"}`}>
+                <MoreHorizontal className="w-[0.95rem] h-[0.95rem]" /><span>{t("more")}</span></button>)}
           </div>
         </nav>
       </div>

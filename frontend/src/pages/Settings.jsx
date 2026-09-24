@@ -46,8 +46,8 @@ export default function Settings() {
           <p className="eyebrow mb-2">{t("textFont")}</p>
           <Row icon={CaseSensitive} title={t("textSize")} sub={`${Math.round(ap.scale * 100)}%`}>
             <div className="flex items-center gap-1.5">
-              <button data-testid="text-smaller" onClick={() => upd({ scale: Math.max(0.8, +(ap.scale - 0.1).toFixed(2)) })} className="w-9 h-9 rounded-full bg-muted font-bold text-xs">A-</button>
-              <button data-testid="text-bigger" onClick={() => upd({ scale: Math.min(1.4, +(ap.scale + 0.1).toFixed(2)) })} className="w-9 h-9 rounded-full bg-muted font-bold text-base">A+</button>
+              <button data-testid="text-smaller" onClick={() => upd({ scale: Math.max(0.5, +(ap.scale - 0.1).toFixed(2)) })} className="w-9 h-9 rounded-full bg-muted font-bold text-xs">A-</button>
+              <button data-testid="text-bigger" onClick={() => upd({ scale: Math.min(1.5, +(ap.scale + 0.1).toFixed(2)) })} className="w-9 h-9 rounded-full bg-muted font-bold text-base">A+</button>
             </div>
           </Row>
           <Row icon={Bold} title={t("boldText")}><Toggle testId="bold-toggle" on={ap.bold} onChange={(v) => upd({ bold: v })} /></Row>

@@ -50,7 +50,10 @@ export default function Profile() {
               {banks.map((b, i) => (
                 <div key={i} className="rounded-xl border border-border/60 p-3 space-y-2" data-testid={`bank-row-${i}`}>
                   <div className="flex items-center justify-between"><span className="eyebrow">Rekening {i + 1}</span>
-                    <button type="button" data-testid={`bank-remove-${i}`} onClick={() => setBanks(banks.filter((_, j) => j !== i))} className="text-[11px] font-semibold text-red-500 hover:underline">Hapus</button></div>
+                    <div className="flex items-center gap-3">
+                      <button type="button" data-testid={`bank-primary-${i}`} onClick={() => setBanks(banks.map((x, j) => ({ ...x, primary: j === i })))} className={`text-[11px] font-semibold ${b.primary ? "text-primary" : "text-muted-foreground hover:underline"}`}>{b.primary ? "★ Utama" : "Jadikan Utama"}</button>
+                      <button type="button" data-testid={`bank-remove-${i}`} onClick={() => setBanks(banks.filter((_, j) => j !== i))} className="text-[11px] font-semibold text-red-500 hover:underline">Hapus</button>
+                    </div></div>
                   <select data-testid={`bank-name-${i}`} className="field" value={b.bank_name} onChange={(e) => updBank(i, "bank_name", e.target.value)}><option value="">— pilih bank —</option>{BANKS.map((x) => <option key={x} value={x}>{x}</option>)}</select>
                   <div className="grid grid-cols-2 gap-3">
                     <input data-testid={`bank-account-${i}`} className="field num" placeholder="No. Rekening" value={b.bank_account} onChange={(e) => updBank(i, "bank_account", e.target.value)} />

@@ -88,7 +88,7 @@ export default function CoachChat() {
               {!msgs.length && <div className="text-center text-muted-foreground text-xs pt-10">Halo! 👋 Aku asisten AI SI FOUR AM.<br />Tanya <b>apa saja</b> — lokasi ramai, tips jualan, atau hal lain. Ketik di bawah atau pilih cepat.</div>}
               {msgs.map((m, idx) => (
                 <div key={m.id || idx} ref={idx === msgs.length - 1 ? lastRef : null} className="space-y-2 chat-pop">
-                  {m.message && <div data-testid="chat-user" className="ml-auto max-w-[82%] w-fit rounded-2xl rounded-br-sm bg-[#06C755] text-white px-3.5 py-2 shadow-sm whitespace-pre-wrap">{m.message}</div>}
+                  {m.message && <div data-testid="chat-user" className="ml-auto max-w-[82%] w-fit rounded-2xl rounded-br-sm bg-primary text-white px-3.5 py-2 shadow-sm whitespace-pre-wrap">{m.message}</div>}
                   <div className="flex items-end gap-2 max-w-[90%]">
                     <div className="w-6 h-6 rounded-full bg-[linear-gradient(135deg,#0064e0,#8a2be2,#ff4d9d,#ffc53d)] flex items-center justify-center shrink-0 mb-0.5"><Sparkles className="w-3 h-3 text-white" /></div>
                     <div data-testid="chat-ai" className="rounded-2xl rounded-bl-sm bg-card border border-border/60 px-3.5 py-2 whitespace-pre-wrap leading-relaxed shadow-sm">{m.reply}</div>
