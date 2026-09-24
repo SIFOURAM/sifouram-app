@@ -31,7 +31,8 @@ export function TierProgress({ s, count = 1 }) {
 function WithdrawDialog({ type, s, range, onClose, onDone }) {
   const { t } = useT();
   const { user } = useAuth();
-  const [f, setF] = useState({ method: user.bank_name ? "bank" : "cash", amount: "", date: today(), note: "" });
+  const banks = s.banks || [];
+  const [f, setF] = useState({ method: banks.length ? "bank" : "cash", amount: "", date: today(), note: "", bank_idx: 0 });
   const [hist, setHist] = useState([]);
   const [done, setDone] = useState(null);
   const [admins, setAdmins] = useState([]);
@@ -39,7 +40,8 @@ function WithdrawDialog({ type, s, range, onClose, onDone }) {
   const load = () => api.get("/withdrawals", { params: { ...range, rider_id: s.rider_id } }).then((r) => setHist(r.data.filter((w) => w.type === type)));
   useEffect(() => { load(); api.get("/users", { params: { role: "superadmin" } }).then((r) => setAdmins(r.data.filter((u) => u.role === "superadmin"))).catch(() => {}); }, []); // eslint-disable-line
   const submit = async () => {
-    try { const { data } = await api.post("/withdrawals", { rider_id: s.rider_id, type, ...f, amount: Number(f.amount) }, { params: range }); toast.success(t("withdraw") + " ✓"); setF({ ...f, amount: "" }); load(); onDone(); setDone(data); }
+    const bk = f.method === "bank" ? banks[f.bank_idx] || {} : {};
+    try { const { data } = await api.post("/withdrawals", { rider_id: s.rider_id, type, method: f.method, date: f.date, note: f.note, amount: Number(f.amount), bank_name: bk.bank_name, bank_account: bk.bank_account, bank_holder: bk.bank_holder }, { params: range }); toast.success(t("withdraw") + " ✓"); setF({ ...f, amount: "" }); load(); onDone(); setDone(data); }
     catch (e) { toast.error(errMsg(e)); }
   };
   const label = type === "allowance" ? "UANG HARIAN" : "INSENTIF";
@@ -63,6 +65,9 @@ function WithdrawDialog({ type, s, range, onClose, onDone }) {
           <Field label={`${t("amount")} (Rp)`}><input data-testid="withdraw-amount" type="number" className="field num" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} /></Field>
           <Field label={t("note")}><input className="field" value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} /></Field>
         </div>
+        {f.method === "bank" && (banks.length > 0
+          ? <div className="mt-2"><Field label="Rekening tujuan"><Select testId="withdraw-bank" value={String(f.bank_idx)} onChange={(v) => setF({ ...f, bank_idx: Number(v) })} options={banks.map((b, i) => ({ value: String(i), label: `${b.bank_name} · ${b.bank_account}` }))} /></Field></div>
+          : <p data-testid="withdraw-no-bank" className="text-xs text-amber-500 mt-2">Belum ada rekening bank. Tambahkan dulu di menu Profil.</p>)}
         <button data-testid="withdraw-submit" onClick={submit} disabled={!f.amount || Number(f.amount) > avail} className="btn-primary w-full">{t("withdraw")}</button>
         <p className="eyebrow mt-2">{t("withdrawals")}</p>
         <div className="max-h-40 overflow-y-auto text-xs">{hist.map((w) => <div key={w.id} className="flex justify-between py-1.5 border-b border-border/40"><span className="num">{w.date} {w.time} · {w.method.toUpperCase()}</span><b className="num">{fmtRp(w.amount)}</b></div>)}{!hist.length && <Empty text={t("noData")} />}</div>

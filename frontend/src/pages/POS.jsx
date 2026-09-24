@@ -7,6 +7,7 @@ import { useT } from "../lib/i18n";
 import { useAuth } from "../context/AuthContext";
 import { PageHeader, Bento, Field, Select, PhotoCapture, ReceiptModal, RLine, Empty, QtySelect } from "../components/common";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
+import CoachChat from "../components/CoachChat";
 
 const BUNDLES = { 1: { cups: 4, price: 45000 }, 2: { cups: 10, price: 110000 } };
 
@@ -253,6 +254,7 @@ export default function POS() {
             {!hist.length && <Empty text={t("noData")} />}
           </div>
         </div>)}
+      {(user.role === "rider" || user.role === "superadmin") && <CoachChat />}
     </div>
   );
 }

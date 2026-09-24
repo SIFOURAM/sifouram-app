@@ -9,12 +9,14 @@ import { PageHeader, Bento, Field } from "../components/common";
 export default function Profile() {
   const { t } = useT();
   const { user, setUser, logout } = useAuth();
-  const [f, setF] = useState({ name: user.name, whatsapp: user.whatsapp, email: user.email, joined_at: user.joined_at || "", placement: user.placement || "", bank_name: user.bank_name || "", bank_account: user.bank_account || "", bank_holder: user.bank_holder || "" });
+  const [f, setF] = useState({ name: user.name, whatsapp: user.whatsapp, email: user.email, joined_at: user.joined_at || "", placement: user.placement || "" });
   const BANKS = ["Bank BCA", "Bank Mandiri (Livin')", "Bank BRI (BRImo)", "Bank BNI (wondr)", "Bank BTN (Bale)", "CIMB Niaga (OCTO Mobile)", "Bank Danamon (D-Bank PRO)", "Bank Permata (PermataMobile X)", "OCBC Indonesia (OCBC mobile)", "Bank Syariah Indonesia (BYOND)", "Bank Jago", "Bank Neo Commerce (neobank)", "Allo Bank", "SeaBank", "blu by BCA Digital", "LINE Bank", "Jenius", "MotionBank", "Bank Raya", "Bank Saqu", "Superbank", "TMRW by UOB"];
+  const [banks, setBanks] = useState(user.banks?.length ? user.banks : (user.bank_name ? [{ bank_name: user.bank_name, bank_account: user.bank_account || "", bank_holder: user.bank_holder || "" }] : []));
+  const updBank = (i, k, v) => setBanks(banks.map((b, j) => (j === i ? { ...b, [k]: v } : b)));
   const [pw, setPw] = useState({ old_password: "", new_password: "" });
   const [pin, setPin] = useState({ password: "", new_pin: "" });
 
-  const saveProfile = async (e) => { e.preventDefault(); try { const { data } = await api.put("/auth/profile", f); setUser(data); toast.success("Profile saved"); } catch (err) { toast.error(errMsg(err)); } };
+  const saveProfile = async (e) => { e.preventDefault(); try { const { data } = await api.put("/auth/profile", { ...f, banks }); setUser(data); toast.success("Profile saved"); } catch (err) { toast.error(errMsg(err)); } };
   const savePw = async (e) => { e.preventDefault(); try { await api.put("/auth/password", pw); toast.success("Password changed"); setPw({ old_password: "", new_password: "" }); } catch (err) { toast.error(errMsg(err)); } };
   const savePin = async (e) => { e.preventDefault(); try { await api.put("/auth/pin", pin); toast.success("PIN changed"); setPin({ password: "", new_pin: "" }); } catch (err) { toast.error(errMsg(err)); } };
   const photo = async (e) => { const file = e.target.files?.[0]; if (!file) return; const p = await compressImage(file, 400); const { data } = await api.put("/auth/profile", { photo: p }); setUser(data); toast.success("Photo updated"); };
@@ -44,10 +46,18 @@ export default function Profile() {
             <Field label="WhatsApp"><input data-testid="profile-wa-input" className="field" value={f.whatsapp} onChange={(e) => setF({ ...f, whatsapp: e.target.value })} /></Field>
             {user.role === "rider" && <><Field label="Joined date"><input type="date" className="field" value={f.joined_at} onChange={(e) => setF({ ...f, joined_at: e.target.value })} /></Field>
               <Field label="Placement"><input className="field" value={f.placement} onChange={(e) => setF({ ...f, placement: e.target.value })} /></Field>
-              <p className="eyebrow pt-2">Rekening Bank</p>
-              <Field label="Bank"><select data-testid="profile-bank-select" className="field" value={f.bank_name} onChange={(e) => setF({ ...f, bank_name: e.target.value })}><option value="">— pilih bank —</option>{BANKS.map((b) => <option key={b} value={b}>{b}</option>)}</select></Field>
-              <div className="grid grid-cols-2 gap-3"><Field label="No. Rekening"><input data-testid="profile-bank-account" className="field num" value={f.bank_account} onChange={(e) => setF({ ...f, bank_account: e.target.value })} /></Field>
-                <Field label="Atas Nama"><input data-testid="profile-bank-holder" className="field" value={f.bank_holder} onChange={(e) => setF({ ...f, bank_holder: e.target.value })} /></Field></div></>}
+              <p className="eyebrow pt-2">Rekening Bank (maks 3)</p>
+              {banks.map((b, i) => (
+                <div key={i} className="rounded-xl border border-border/60 p-3 space-y-2" data-testid={`bank-row-${i}`}>
+                  <div className="flex items-center justify-between"><span className="eyebrow">Rekening {i + 1}</span>
+                    <button type="button" data-testid={`bank-remove-${i}`} onClick={() => setBanks(banks.filter((_, j) => j !== i))} className="text-[11px] font-semibold text-red-500 hover:underline">Hapus</button></div>
+                  <select data-testid={`bank-name-${i}`} className="field" value={b.bank_name} onChange={(e) => updBank(i, "bank_name", e.target.value)}><option value="">— pilih bank —</option>{BANKS.map((x) => <option key={x} value={x}>{x}</option>)}</select>
+                  <div className="grid grid-cols-2 gap-3">
+                    <input data-testid={`bank-account-${i}`} className="field num" placeholder="No. Rekening" value={b.bank_account} onChange={(e) => updBank(i, "bank_account", e.target.value)} />
+                    <input data-testid={`bank-holder-${i}`} className="field" placeholder="Atas Nama" value={b.bank_holder} onChange={(e) => updBank(i, "bank_holder", e.target.value)} />
+                  </div>
+                </div>))}
+              {banks.length < 3 && <button type="button" data-testid="bank-add" onClick={() => setBanks([...banks, { bank_name: "", bank_account: "", bank_holder: "" }])} className="btn-ghost w-full h-9 text-xs">+ Tambah rekening</button>}</>}
             <button data-testid="profile-save-button" className="btn-primary w-full">{t("save")}</button>
           </form>
         </Bento>

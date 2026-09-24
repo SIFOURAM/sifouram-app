@@ -1,13 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
-import { LayoutDashboard, Boxes, Layers, ShoppingCart, Bike, Wallet, FileText, HandCoins, LineChart, BadgeDollarSign, Settings as Cog, MoreHorizontal, LogOut, Sun, Moon, Gauge, Users } from "lucide-react";
+import { LayoutDashboard, Boxes, Layers, ShoppingCart, Bike, Wallet, FileText, HandCoins, LineChart, BadgeDollarSign, Settings as Cog, MoreHorizontal, LogOut, Sun, Moon, Gauge, Users, Bell } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useT } from "../lib/i18n";
 import { api } from "../lib/api";
 import { initials } from "../lib/helpers";
-import CoachChat from "./CoachChat";
 import GpsGate from "./GpsGate";
-import { Bell } from "lucide-react";
 
 function NotifBell() {
   const [list, setList] = useState([]);
@@ -96,7 +94,6 @@ export default function Layout() {
           </div>
         </header>
         <main className="flex-1 p-4 pb-28 lg:p-8 lg:pb-8 max-w-[1400px] w-full mx-auto min-w-0"><Outlet /></main>
-        {user.role === "rider" && <CoachChat />}
 
         {moreOpen && <div className="lg:hidden fixed inset-0 z-40 bg-black/40" onClick={() => setMoreOpen(false)} />}
         <nav className="lg:hidden fixed bottom-0 inset-x-0 z-50 bg-background/90 backdrop-blur-xl border-t border-border/70" data-testid="bottom-nav">

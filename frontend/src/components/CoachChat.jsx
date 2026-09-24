@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { MessageSquareHeart, Send, X, MapPin } from "lucide-react";
+import { Sparkles, Send, X, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { api, errMsg } from "../lib/api";
 
@@ -23,7 +23,13 @@ export default function CoachChat() {
   const quick = ["Lokasi ramai terdekat sekarang?", "Tips tembus 50 cup hari ini", "Cara nawarin bundling", "Semangatin aku dong!"];
   return (
     <>
-      <button data-testid="coach-open" onClick={() => setOpen(true)} className="fixed right-4 bottom-24 lg:bottom-6 z-40 w-14 h-14 rounded-full bg-primary text-white shadow-xl flex items-center justify-center hover:scale-105 transition-transform gold"><MessageSquareHeart className="w-6 h-6" /></button>
+      <button data-testid="coach-open" onClick={() => setOpen(true)} aria-label="Tanya AI"
+        className="fixed right-4 bottom-24 lg:bottom-6 z-40 rounded-full p-[2px] bg-[linear-gradient(135deg,#0064e0,#8a2be2,#ff4d9d,#ffc53d)] shadow-xl hover:scale-105 active:scale-95 transition-transform">
+        <span className="flex items-center gap-2 rounded-full bg-background/95 backdrop-blur pl-1.5 pr-3 py-1.5">
+          <span className="flex items-center justify-center w-8 h-8 rounded-full bg-[linear-gradient(135deg,#0064e0,#8a2be2,#ff4d9d,#ffc53d)]"><Sparkles className="w-4 h-4 text-white" /></span>
+          <span className="text-xs font-bold leading-tight text-left">Tanya AI<span className="block text-[9px] font-medium text-muted-foreground">Lokasi ramai jualan</span></span>
+        </span>
+      </button>
       {open && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4" onClick={() => setOpen(false)}>
           <div onClick={(e) => e.stopPropagation()} data-testid="coach-panel" className="bento gold w-full sm:max-w-md h-[85vh] sm:h-[600px] flex flex-col p-0 overflow-hidden rounded-b-none sm:rounded-3xl">

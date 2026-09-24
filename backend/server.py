@@ -193,6 +193,7 @@ class ProfileIn(BaseModel):
     bank_name: Optional[str] = None
     bank_account: Optional[str] = None
     bank_holder: Optional[str] = None
+    banks: Optional[list] = None
 
 
 class PasswordIn(BaseModel):
@@ -365,6 +366,9 @@ class WithdrawalIn(BaseModel):
     method: str  # cash | bank
     amount: float
     note: str = ""
+    bank_name: Optional[str] = None
+    bank_account: Optional[str] = None
+    bank_holder: Optional[str] = None
 
 
 class ConfigIn(BaseModel):
@@ -1133,13 +1137,23 @@ async def create_withdrawal(body: WithdrawalIn, start: str, end: str, u=Depends(
     if body.amount <= 0 or body.amount > avail + 0.01:
         raise HTTPException(400, f"Amount exceeds available balance ({avail:.0f})")
     doc = {**body.model_dump(), "id": uid(), "rider_name": rs["rider_name"], "time": now_wib(), "period_start": start, "period_end": end, "approved_by": u["name"],
-           "bank_name": u.get("bank_name"), "bank_account": u.get("bank_account"), "bank_holder": u.get("bank_holder"), "created_at": now_iso()}
+           "bank_name": body.bank_name or u.get("bank_name"), "bank_account": body.bank_account or u.get("bank_account"), "bank_holder": body.bank_holder or u.get("bank_holder"),
+           "status": "pending", "created_at": now_iso()}
     await db.withdrawals.insert_one(doc)
     doc.pop("_id", None)
     await db.notifications.insert_one({"id": uid(), "for_role": "superadmin", "type": "withdrawal", "title": f"{'Uang Harian' if body.type == 'allowance' else 'Insentif'} · {rs['rider_name']}",
                                        "body": f"Rp {body.amount:,.0f} via {body.method.upper()} · {body.date} {doc['time']}", "ref_id": doc["id"], "read": False, "created_at": now_iso()})
     await gs_sync("withdrawals", doc)
     return doc
+
+
+@api.post("/withdrawals/{wid}/accept")
+async def accept_withdrawal(wid: str, u=Depends(SUPER)):
+    w = await db.withdrawals.find_one({"id": wid})
+    if not w:
+        raise HTTPException(404, "Withdrawal not found")
+    await db.withdrawals.update_one({"id": wid}, {"$set": {"status": "diterima", "accepted_by": u["name"], "accepted_at": now_iso()}})
+    return await db.withdrawals.find_one({"id": wid}, NOID)
 
 
 @api.get("/notifications")
@@ -1310,6 +1324,7 @@ async def salary(start: str, end: str, rider_id: Optional[str] = None, u=Depends
         iw = sum(w["amount"] for w in wds if w["rider_id"] == r["id"] and w["type"] == "incentive")
         nxt = next(((n, th, p, d) for n, th, p, d in TIERS if gross < th), None)
         out.append({"rider_id": r["id"], "rider_name": r["name"], "photo": r.get("photo"), "joined_at": r.get("joined_at"), "placement": r.get("placement"),
+                    "banks": r.get("banks") or ([{"bank_name": r.get("bank_name"), "bank_account": r.get("bank_account"), "bank_holder": r.get("bank_holder")}] if r.get("bank_name") else []),
                     "gross": gross, "cups": cups, "attendance_days": att_days, "sales_days": len(sale_days), "allowance_days": allowance_days,
                     "allowance": allowance, "allowance_withdrawn": aw, "allowance_available": allowance - aw, "tier": tier, "incentive_pct": pct, "incentive": incentive,
                     "incentive_withdrawn": iw, "incentive_available": incentive - iw, "total_income": allowance + incentive,

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import { api } from "../lib/api";
+import { useAuth } from "../context/AuthContext";
 import { fmtRp, initials } from "../lib/helpers";
 import { useT } from "../lib/i18n";
 import { PageHeader, Bento, DateFilter, Empty } from "../components/common";
@@ -8,10 +10,14 @@ import { TierProgress } from "./RiderDashboard";
 
 export default function Salary() {
   const { t } = useT();
+  const { user } = useAuth();
   const nav = useNavigate();
   const [range, setRange] = useState(null);
   const [d, setD] = useState(null);
-  useEffect(() => { if (range) api.get("/salary", { params: range }).then((r) => setD(r.data)); }, [range]);
+  const [wds, setWds] = useState([]);
+  const loadWds = () => range && api.get("/withdrawals", { params: range }).then((r) => setWds(r.data)).catch(() => {});
+  useEffect(() => { if (range) { api.get("/salary", { params: range }).then((r) => setD(r.data)); loadWds(); } }, [range]); // eslint-disable-line
+  const accept = async (id) => { try { await api.post(`/withdrawals/${id}/accept`); toast.success("Ditandai diterima ✓"); loadWds(); } catch { toast.error("Gagal menandai"); } };
   return (
     <div data-testid="salary-page">
       <PageHeader eyebrow="Trader income" title={t("salary")}><DateFilter onChange={setRange} /></PageHeader>
@@ -32,6 +38,20 @@ export default function Salary() {
                 <div className="rounded-xl bg-muted p-2"><p className="eyebrow">Incentive</p><p className="num text-xs font-bold">{fmtRp(r.incentive)}</p></div>
               </div>
               <TierProgress s={r} />
+              {(() => { const rw = wds.filter((w) => w.rider_id === r.rider_id); return rw.length > 0 ? (
+                <div className="mt-4 border-t border-border/40 pt-3 space-y-1.5" data-testid={`wd-list-${r.rider_id}`}>
+                  <p className="eyebrow">Pencairan Gaji / Insentif</p>
+                  {rw.map((w) => (
+                    <div key={w.id} className="flex items-center justify-between gap-2 text-xs">
+                      <span className="truncate flex-1">{w.date} · {w.type === "allowance" ? "Uang Harian" : "Insentif"} · {w.method.toUpperCase()}</span>
+                      <b className="num">{fmtRp(w.amount)}</b>
+                      {w.status === "diterima"
+                        ? <span data-testid={`wd-status-${w.id}`} className="shrink-0 text-[10px] font-bold text-emerald-500 bg-emerald-500/10 rounded-full px-2 py-0.5">Diterima ✓</span>
+                        : user.role === "superadmin"
+                          ? <button data-testid={`wd-accept-${w.id}`} onClick={() => accept(w.id)} className="shrink-0 text-[10px] font-bold text-primary border border-primary/50 rounded-full px-2 py-0.5 hover:bg-primary hover:text-white transition-colors">Diterima</button>
+                          : <span data-testid={`wd-status-${w.id}`} className="shrink-0 text-[10px] font-semibold text-amber-500 bg-amber-500/10 rounded-full px-2 py-0.5">Pending</span>}
+                    </div>))}
+                </div>) : null; })()}
             </Bento>))}
           {!d.riders.length && <Empty text={t("noData")} />}
         </div>
