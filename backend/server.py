@@ -500,6 +500,8 @@ async def verify_pin(body: PinIn, u=Depends(ANY)):
 @api.put("/auth/profile")
 async def update_profile(body: ProfileIn, u=Depends(ANY)):
     upd = {k: v for k, v in body.model_dump().items() if v is not None}
+    if "banks" in upd and isinstance(upd["banks"], list):
+        upd["banks"] = upd["banks"][:3]
     if "email" in upd:
         upd["email"] = upd["email"].lower()
     if upd.get("photo"):
@@ -1152,6 +1154,9 @@ async def accept_withdrawal(wid: str, u=Depends(SUPER)):
     w = await db.withdrawals.find_one({"id": wid})
     if not w:
         raise HTTPException(404, "Withdrawal not found")
+    if w.get("status") == "diterima":
+        w.pop("_id", None)
+        return w
     await db.withdrawals.update_one({"id": wid}, {"$set": {"status": "diterima", "accepted_by": u["name"], "accepted_at": now_iso()}})
     return await db.withdrawals.find_one({"id": wid}, NOID)
 

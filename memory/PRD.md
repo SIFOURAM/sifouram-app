@@ -48,6 +48,11 @@ Advanced coffee-cart business OS (POS, inventory w/ recipes, menu stock, rider s
 ## Revision 3 (2026-06) — File & media storage
 - Emergent Object Storage integrated (server.py: init_storage/put_object/get_object/store_photo). All uploaded photos (attendance check-in/out, rider stock evidence, profile, menu) are uploaded to bucket path `sifouram/{folder}/{user_id}/{uuid}.ext`, referenced in `db.files` (soft-delete), and served via GET /api/files/{path} (public by unguessable UUID path, cached). Falls back to inline base64 if storage fails. GET /api/files (staff list), DELETE /api/files/{path} (superadmin soft-delete).
 
+## Revision 4 (2026-06) — 3 new features (tested: iteration_3.json, backend 7/7 + frontend 100%)
+- AI "Tanya AI" button restyled as WhatsApp Meta-AI gradient pill (CoachChat.jsx), moved OUT of global Layout → now mounted only inside POS/Kasir page, and only for Rider + Superadmin (Bar Team excluded). Focus: recommend crowded selling spots (existing Overpass POIs).
+- Withdrawal disbursement status: create_withdrawal sets status='pending'; new POST /api/withdrawals/{wid}/accept (superadmin, idempotent) → status='diterima' + accepted_by/accepted_at. Salary/Gaji page shows per-rider "Pencairan Gaji / Insentif" list with 'Diterima' button (superadmin only) → flips to 'Diterima ✓'; rider sees 'Pending' badge only.
+- Profile: riders can save up to 3 bank accounts (banks[] each {bank_name, bank_account, bank_holder}); UI add/remove rows (cap 3), server also caps to 3. WithdrawDialog lets rider pick target bank (withdraw-bank). Legacy single-bank fields auto-migrated into banks[] on read.
+
 ## Backlog / P1-P2
 - Google Drive photo storage (needs OAuth credentials) · Google Maps (needs API key)
 - V2: AI demand forecasting, Bluetooth thermal printing, WA auto-broadcast marketing
