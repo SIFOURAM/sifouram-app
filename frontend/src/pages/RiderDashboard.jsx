@@ -132,7 +132,7 @@ export default function RiderDashboard() {
             <p className="font-heading font-bold text-lg">{rider?.name || t("allRiders")}</p>
             {rider && <><p className="text-xs text-muted-foreground flex items-center gap-1 mt-1"><Calendar className="w-3 h-3" />{t("joined")} {rider.joined_at ? fmtDate(rider.joined_at) : "-"}</p>
               <p className="text-xs text-muted-foreground flex items-center gap-1"><MapPin className="w-3 h-3" />{rider.placement || "-"}</p></>}
-            <div className="mt-4 w-full rounded-xl bg-muted p-3"><p className="eyebrow">{t("totalIncome")}</p><p data-testid="rider-total-income" className="num font-bold text-primary">{fmtRp(agg.total_income)}</p><p className="text-[10px] text-muted-foreground">{fmtRp(20000)} × {agg.attendance_days} + {fmtRp(agg.incentive)}</p></div>
+            <div className="mt-4 w-full rounded-xl bg-muted p-3"><p className="eyebrow">{t("totalIncome")}</p><p data-testid="rider-total-income" className="num font-bold text-primary">{fmtRp(agg.total_income)}</p></div>
           </Bento>
           <Bento className="fade-up" testId="rider-stat-allowance"><div className="flex justify-between items-start"><p className="eyebrow">{t("dailyAllowance")}</p><Wallet className="w-4 h-4 text-primary" /></div>
             <p className="mt-3 text-2xl font-bold num font-heading">{fmtRp(agg.allowance)}</p><p className="text-xs text-muted-foreground">{t("available")}: <b className="num">{fmtRp(agg.allowance_available)}</b></p>
