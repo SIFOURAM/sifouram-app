@@ -5,14 +5,8 @@ import { Dialog, DialogContent } from "./ui/dialog";
 import { compressImage, rangeFor, screenshotEl, shareReceipt, printBluetooth } from "../lib/helpers";
 import { useT } from "../lib/i18n";
 
-export const PageHeader = ({ eyebrow, title, children }) => (
-  <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8 fade-up">
-    <div>
-      {eyebrow && <p className="eyebrow mb-2">{eyebrow}</p>}
-      <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">{title}</h1>
-    </div>
-    {children && <div className="flex flex-wrap gap-2 items-center">{children}</div>}
-  </div>
+export const PageHeader = ({ children }) => (
+  children ? <div className="flex flex-wrap gap-2 items-center justify-end mb-5 fade-up">{children}</div> : null
 );
 
 export const Bento = ({ className = "", gold, children, testId, style }) => (

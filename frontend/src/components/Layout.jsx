@@ -113,15 +113,15 @@ export default function Layout() {
             <div className="absolute bottom-full inset-x-2 mb-2 rounded-2xl bg-card border border-border shadow-2xl p-2 grid grid-cols-2 gap-1 fade-up gold" data-testid="more-menu">
               {more.map((i) => <NavLink key={i.to} to={i.to} data-testid={`more-${i.key}`} className={({ isActive }) => `flex items-center gap-3 px-3 h-11 rounded-xl text-sm font-medium ${isActive ? "bg-primary/10 text-primary" : "hover:bg-muted"}`}><i.icon className="w-4 h-4" />{t(i.key)}</NavLink>)}
             </div>)}
-          <div className="flex justify-around px-1 py-2 pb-[max(env(safe-area-inset-bottom),8px)]">
+          <div className="flex justify-around px-1 py-1.5 pb-[max(env(safe-area-inset-bottom),6px)]">
             {main.map((i) => (
               <NavLink key={i.to} to={i.to} end={i.to === "/"} data-testid={`bottomnav-${i.key}`}
-                className={({ isActive }) => `flex flex-col items-center gap-1 px-2 py-1.5 rounded-xl text-[10px] font-semibold min-w-0 flex-1 transition-colors ${isActive ? "text-primary" : "text-muted-foreground"}`}>
-                <i.icon className="w-5 h-5" /><span className="truncate w-full text-center">{t(i.key)}</span>
+                className={({ isActive }) => `flex flex-col items-center gap-0.5 px-1.5 py-1 rounded-xl text-[8px] font-semibold min-w-0 flex-1 transition-colors ${isActive ? "text-primary" : "text-muted-foreground"}`}>
+                <i.icon className="w-[15px] h-[15px]" /><span className="truncate w-full text-center">{t(i.key)}</span>
               </NavLink>))}
             {more.length > 0 && (
-              <button data-testid="bottomnav-more" onClick={() => setMoreOpen(!moreOpen)} className={`flex flex-col items-center gap-1 px-2 py-1.5 text-[10px] font-semibold flex-1 ${moreActive || moreOpen ? "text-primary" : "text-muted-foreground"}`}>
-                <MoreHorizontal className="w-5 h-5" /><span>{t("more")}</span></button>)}
+              <button data-testid="bottomnav-more" onClick={() => setMoreOpen(!moreOpen)} className={`flex flex-col items-center gap-0.5 px-1.5 py-1 text-[8px] font-semibold flex-1 ${moreActive || moreOpen ? "text-primary" : "text-muted-foreground"}`}>
+                <MoreHorizontal className="w-[15px] h-[15px]" /><span>{t("more")}</span></button>)}
           </div>
         </nav>
       </div>

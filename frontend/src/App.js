@@ -1,5 +1,6 @@
 import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { RotateCcw } from "lucide-react";
 import { Toaster } from "./components/ui/sonner";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { LangProvider } from "./lib/i18n";
@@ -67,6 +68,11 @@ export default function App() {
       <AuthProvider>
         <BrowserRouter><Shell /></BrowserRouter>
         <Toaster position="top-right" richColors />
+        <div className="rotate-lock" data-testid="rotate-lock">
+          <RotateCcw className="w-12 h-12 text-primary" />
+          <p style={{ fontFamily: "Outfit", fontWeight: 800, fontSize: 20 }}>Putar ke Mode Portrait</p>
+          <p style={{ opacity: 0.7, fontSize: 13 }}>Aplikasi SI FOUR AM hanya dapat digunakan dalam posisi tegak (portrait). Silakan putar perangkat Anda.</p>
+        </div>
       </AuthProvider>
     </LangProvider>
   );
