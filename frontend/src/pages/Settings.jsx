@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Moon, Sun, Globe, Bell, MapPin, ShieldCheck, Type, Bold, Palette, CaseSensitive } from "lucide-react";
+import { Moon, Sun, Globe, Bell, MapPin, ShieldCheck, Type, Bold, Palette, CaseSensitive, Monitor, Tablet, Smartphone } from "lucide-react";
 import { api } from "../lib/api";
 import { useT, LANGS } from "../lib/i18n";
 import { useAuth } from "../context/AuthContext";
@@ -37,6 +37,9 @@ export default function Settings() {
             <div className="flex gap-1">{["dark", "light"].map((k) => <button key={k} data-testid={`theme-${k}`} onClick={() => { setTheme(k); save({ theme: k }); }} className={`h-9 px-4 rounded-full text-xs font-semibold capitalize ${theme === k ? "bg-primary text-white" : "bg-muted"}`}>{k}</button>)}</div></Row>
           <Row icon={Globe} title={t("language")} sub="ID · EN · 日本語 · 中文 · العربية">
             <div className="flex flex-wrap gap-1 justify-end">{LANGS.map(([k, l]) => <button key={k} data-testid={`lang-${k}`} onClick={() => { setLang(k); save({ language: k }); }} className={`h-8 px-3 rounded-full text-[11px] font-semibold ${lang === k ? "bg-primary text-white" : "bg-muted"}`}>{l}</button>)}</div></Row>
+          <Row icon={Monitor} title="Tampilan" sub="Web · Tablet · Mobile">
+            <div className="flex gap-1">{[["web", "Web", Monitor], ["tablet", "Tablet", Tablet], ["mobile", "Mobile", Smartphone]].map(([k, l, Ic]) => <button key={k} data-testid={`view-${k}`} onClick={() => upd({ view: k })} className={`h-8 px-3 rounded-full text-[11px] font-semibold flex items-center gap-1 ${ap.view === k ? "bg-primary text-white" : "bg-muted"}`}><Ic className="w-3 h-3" />{l}</button>)}</div>
+          </Row>
           <Row icon={Bell} title={t("notifications")}><Toggle testId="notifications-toggle" on={s.notifications !== false} onChange={(v) => save({ notifications: v })} /></Row>
           {user.role === "rider" && <Row icon={MapPin} title={t("gps")} sub={t("whileUsing")}>
             <select data-testid="gps-mode-select" className="field w-40 h-9" value={s.gps_mode || "while_using"} onChange={(e) => save({ gps_mode: e.target.value })}><option value="while_using">{t("whileUsing")}</option><option value="off">Off</option></select></Row>}

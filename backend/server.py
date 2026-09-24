@@ -1199,6 +1199,7 @@ class CoachIn(BaseModel):
     message: str
     lat: Optional[float] = None
     lng: Optional[float] = None
+    provider: Optional[str] = "gpt"
 
 
 def _overpass(lat: float, lng: float):
@@ -1251,9 +1252,11 @@ async def coach_chat(body: CoachIn, u=Depends(ANY)):
               "Jawab padat (maks ±180 kata), pakai bullet & emoji secukupnya. Jika pertanyaan menyangkut jualan atau lokasi, WAJIB sertakan 2–3 lokasi ramai TERDEKAT dari daftar POI dengan alasan & jam terbaik, plus 1 taktik jualan konkret (sapaan, bundling 4 cup Rp45.000 / 10 cup Rp110.000, upsell). "
               "Untuk pertanyaan lain, jawab langsung & akurat, lalu bila relevan kaitkan dengan cara menambah penjualan kopi. Selalu tutup dengan 1 kalimat penyemangat. "
               f"\nKONTEKS: waktu {datetime.now(WIB).strftime('%A %H:%M')} WIB. Lokasi rider: {area or 'tidak diketahui'}. User: {u['name']} ({u['role']}). Terjual hari ini {sold} cup (target 50). Sisa stok: {remaining}.\nPOI radius 1,5 km:\n{poi_txt}\n\nRiwayat:\n{hist_txt}")
-    chat = LlmChat(api_key=os.environ["EMERGENT_LLM_KEY"], session_id=f"coach-{u['id']}", system_message=system).with_model("openai", "gpt-5.4-mini")
+    models = {"gpt": ("openai", "gpt-5.4"), "claude": ("anthropic", "claude-sonnet-4-6"), "gemini": ("gemini", "gemini-3.1-pro-preview")}
+    prov, model = models.get(body.provider or "gpt", ("openai", "gpt-5.4"))
+    chat = LlmChat(api_key=os.environ["EMERGENT_LLM_KEY"], session_id=f"coach-{u['id']}", system_message=system).with_model(prov, model)
     reply = await chat.send_message(UserMessage(text=body.message))
-    doc = {"id": uid(), "user_id": u["id"], "message": body.message, "reply": reply, "pois": pois, "area": area, "sold": sold, "created_at": now_iso()}
+    doc = {"id": uid(), "user_id": u["id"], "message": body.message, "reply": reply, "provider": body.provider or "gpt", "pois": pois, "area": area, "sold": sold, "created_at": now_iso()}
     await db.coach_chats.insert_one(doc)
     doc.pop("_id", None)
     return doc

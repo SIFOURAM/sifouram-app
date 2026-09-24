@@ -28,6 +28,8 @@ export default function CoachChat() {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [pois, setPois] = useState([]);
+  const [provider, setProvider] = useState(localStorage.getItem("si4am_ai_provider") || "gpt");
+  const setProv = (p) => { setProvider(p); localStorage.setItem("si4am_ai_provider", p); };
   const loaded = useRef(false);
   const lastRef = useRef();
 
@@ -48,7 +50,7 @@ export default function CoachChat() {
     let pos = {};
     try { const p = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { timeout: 5000 })); pos = { lat: p.coords.latitude, lng: p.coords.longitude }; } catch { /* no gps */ }
     try {
-      const { data } = await api.post("/coach/chat", { message, ...pos });
+      const { data } = await api.post("/coach/chat", { message, provider, ...pos });
       setMsgs((m) => [...m, data]);
       setPois(data.pois || []);
       playChime();
@@ -75,6 +77,9 @@ export default function CoachChat() {
             <div className="flex items-center gap-3 p-4 border-b border-border/60 bg-gradient-to-r from-primary/10 to-transparent">
               <div className="w-9 h-9 rounded-full bg-[linear-gradient(135deg,#0064e0,#8a2be2,#ff4d9d,#ffc53d)] flex items-center justify-center shrink-0"><Sparkles className="w-4 h-4 text-white" /></div>
               <div className="flex-1 min-w-0"><p className="font-heading font-bold leading-tight">SI FOUR AM AI</p><p className="text-[11px] text-muted-foreground truncate">Tanya apa saja — dimaksimalkan untuk jualan ☕</p></div>
+              <select data-testid="coach-provider" value={provider} onChange={(e) => setProv(e.target.value)} className="text-[11px] font-semibold rounded-full bg-muted px-2 py-1 border border-border shrink-0">
+                <option value="gpt">GPT</option><option value="claude">Claude</option><option value="gemini">Gemini</option>
+              </select>
               <button data-testid="coach-close" onClick={() => setOpen(false)} className="p-2 rounded-full hover:bg-muted"><X className="w-4 h-4" /></button>
             </div>
 

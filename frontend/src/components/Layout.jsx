@@ -6,6 +6,7 @@ import { useT } from "../lib/i18n";
 import { api } from "../lib/api";
 import { initials } from "../lib/helpers";
 import GpsGate from "./GpsGate";
+import { getAppearance } from "../lib/appearance";
 
 function playTriTone() {
   try {
@@ -86,13 +87,9 @@ export default function Layout() {
   const nav = useNavigate();
   const loc = useLocation();
   const [moreOpen, setMoreOpen] = useState(false);
-  const [hideHead, setHideHead] = useState(false);
-  const lastY = useRef(0);
-  useEffect(() => {
-    const onScroll = () => { const y = window.scrollY; setHideHead(y > lastY.current && y > 80); lastY.current = y; };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
+  const [vm, setVm] = useState(getAppearance().view || "web");
+  useEffect(() => { const h = () => setVm(getAppearance().view || "web"); window.addEventListener("appearancechange", h); return () => window.removeEventListener("appearancechange", h); }, []);
+  const forceMobile = vm !== "web";
   useRiderGps(user);
   useEffect(() => setMoreOpen(false), [loc.pathname]);
   const { main, more } = NAV[user.role] || { main: [], more: [] };
@@ -110,7 +107,7 @@ export default function Layout() {
   return (
     <GpsGate role={user.role}>
     <div className="min-h-screen flex">
-      <aside className="hidden lg:flex flex-col w-64 xl:w-72 border-r border-border/70 p-6 sticky top-0 h-screen overflow-y-auto" data-testid="sidebar">
+      <aside className={`${forceMobile ? "hidden" : "hidden lg:flex"} flex-col w-64 xl:w-72 border-r border-border/70 p-6 sticky top-0 h-screen overflow-y-auto`} data-testid="sidebar">
         <div className="flex items-center gap-3 mb-8">
           <div className="w-10 h-10 rounded-2xl overflow-hidden bg-primary/10 flex items-center justify-center"><img src="/logo.png" alt="SI FOUR AM" className="w-full h-full object-contain" /></div>
           <div><p className="font-heading font-bold leading-tight">SI FOUR AM</p><p className="eyebrow">{roleLabel}</p></div>
@@ -124,9 +121,9 @@ export default function Layout() {
       </aside>
 
       <div className="flex-1 min-w-0 flex flex-col">
-        <header className={`flex items-center justify-between px-4 lg:px-8 h-16 border-b border-border/70 sticky top-0 bg-background/80 backdrop-blur-xl z-40 transition-transform duration-300 ${hideHead ? "-translate-y-full" : "translate-y-0"}`} data-testid="top-header">
-          <div className="flex items-center gap-2 lg:hidden"><img src="/logo.png" alt="SI FOUR AM" className="w-8 h-8 rounded-xl object-contain" /><span className="font-heading font-bold">SI FOUR AM</span></div>
-          <div className="hidden lg:block"><p className="eyebrow">{roleLabel}</p></div>
+        <header className="flex items-center justify-between px-4 lg:px-8 h-16 border-b border-border/70 sticky top-0 bg-background/80 backdrop-blur-xl z-40" data-testid="top-header">
+          <div className={`items-center gap-2 ${forceMobile ? "flex" : "flex lg:hidden"}`}><img src="/logo.png" alt="SI FOUR AM" className="w-8 h-8 rounded-xl object-contain" /><span className="font-heading font-bold">SI FOUR AM</span></div>
+          <div className={forceMobile ? "hidden" : "hidden lg:block"}><p className="eyebrow">{roleLabel}</p></div>
           <div className="flex items-center gap-2">
             {user.role === "superadmin" && <NotifBell />}
             <ThemeBtn id="theme-toggle-button" />
@@ -134,10 +131,10 @@ export default function Layout() {
             <Avatar />
           </div>
         </header>
-        <main className="flex-1 p-4 pb-28 lg:p-8 lg:pb-8 max-w-[1400px] w-full mx-auto min-w-0"><Outlet /></main>
+        <main className={`flex-1 max-w-[1400px] w-full mx-auto min-w-0 ${forceMobile ? "p-4 pb-28" : "p-4 pb-28 lg:p-8 lg:pb-8"}`}><Outlet /></main>
 
         {moreOpen && <div className="lg:hidden fixed inset-0 z-40 bg-black/40" onClick={() => setMoreOpen(false)} />}
-        <nav className="lg:hidden fixed bottom-0 inset-x-0 z-50 bg-background/90 backdrop-blur-xl border-t border-border/70" data-testid="bottom-nav">
+        <nav className={`${forceMobile ? "" : "lg:hidden"} fixed bottom-0 inset-x-0 z-50 bg-background/90 backdrop-blur-xl border-t border-border/70`} data-testid="bottom-nav">
           {moreOpen && (
             <div className="absolute bottom-full inset-x-2 mb-2 rounded-2xl bg-card border border-border shadow-2xl p-2 grid grid-cols-2 gap-1 fade-up gold" data-testid="more-menu">
               {more.map((i) => <NavLink key={i.to} to={i.to} data-testid={`more-${i.key}`} className={({ isActive }) => `flex items-center gap-3 px-3 h-11 rounded-xl text-sm font-medium ${isActive ? "bg-primary/10 text-primary" : "hover:bg-muted"}`}><i.icon className="w-4 h-4" />{t(i.key)}</NavLink>)}
