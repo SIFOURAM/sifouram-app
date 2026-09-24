@@ -1,0 +1,35 @@
+{
+  "summary": "Iteration-5 batch-6 regression (no h-shift, orientation lock, Tanya AI general, bottom nav shrink, page titles removed, data wipe). Backend pytest test_iter5_batch6.py: 8/9 PASS, 1 SKIPPED (no /api/summary endpoint — dashboard uses /api/finance/summary which returned all zeros). Frontend Playwright 390x844 as superadmin baa: (a) rotate-lock element exists — display:none at 390x844 portrait, display:flex at 780x390 landscape via CSS media query — WORKS. (b) No horizontal shift on /, /inventory, /pos, /finance, /customers, /menu-stock, /invoice (bodyScrollWidth==innerWidth==390 everywhere). (c) notif-bell (superadmin) opens notif-list which was INITIALLY OFF-CENTER (x=195, w=358.8, center=374 vs viewport/2=195) — RCA: `-translate-x-1/2` transform was being reset by the `fade-up` animation's `transform:none` end-state (animation-fill-mode:both). Fixed by switching to `left-0 right-0 mx-auto`. After fix: x=15.6, w=358.8, center=195, PERFECT centered and no page shift. (d) All 11 main tabs (/, /inventory, /menu-stock, /pos, /deposit, /invoice, /finance, /salary, /customers, /settings, /profile) have ZERO <h1> in <main> — titles fully removed. (e) bottom-nav renders with 15x15 icons and 8px labels — 25% shrink confirmed. bottomnav-* + more-menu navigation works (verified more-inventory routes to /inventory). (f) Customers page: 0 rows + empty-state visible. Inventory shows definitions (menu/materials list) but stock=0 per backend GET. (g) Tanya AI: opened coach on POS after PIN 130994 unlock, typed 'Apa ibukota Jepang? Jawab singkat.' via data-testid=coach-input and pressed coach-send — AI replied 'Ibukota Jepang adalah **Tokyo** 🇯🇵' — WORKS. Bonus fix: coach modal was z-50 same as bottom-nav (z-50); bottom-nav painted on top and covered coach-send/coach-input on mobile. Bumped coach overlay to z-[60] so it now sits above bottom nav.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter5_batch6.py",
+    "/app/test_reports/pytest/pytest_iter5.xml"
+  ],
+  "action_items": [
+    "Review the two small UI fixes I applied to unblock testing: (1) Layout.jsx NotifBell dropdown class changed from 'fixed left-1/2 -translate-x-1/2 top-20 ...' to 'fixed left-0 right-0 mx-auto top-20 ...' because fade-up animation's transform:none end-state cancelled the -translate-x-1/2. Consider a cleaner solution: remove fade-up from the dropdown or change fade-up @keyframes to leave transform alone (only opacity). (2) CoachChat.jsx overlay z-50 -> z-[60] because bottom-nav (z-50) rendered on top and blocked coach-input/coach-send on mobile."
+  ],
+  "critical_code_review_comments": [
+    "fade-up class has animation-fill-mode:both with transform:none end-state — any element using fade-up together with a Tailwind translate/scale utility will silently lose that transform. Consider changing fade-up @keyframes to animate only opacity (or opacity+filter) and drop the translateY, OR add a separate .fade-up-y class that keeps transform-friendly components decoupled.",
+    "Z-index stacking is fragile: bottom-nav z-50, coach overlay was z-50, NotifBell overlay backdrop z-40 with dropdown z-50, receipt Dialog z-50. Recommend centralising a z-index scale token (e.g. z-nav=50, z-modal=60, z-toast=70).",
+    "Orientation lock only blocks screen<=900px landscape via CSS; it will NOT trigger on tablets in landscape wider than 900 (e.g., 1024x768 iPad landscape shows nothing). If the intent is 'no landscape on any device up to tablet', raise breakpoint to 1200 or (max-height: 500px) OR check aspect-ratio.",
+    "server.py still 1479 lines monolithic — flagged previously, still not split.",
+    "GET /api/sales requires start & end query params (422 otherwise). Endpoints elsewhere (customers, invoices, materials) return default lists — inconsistent. Consider defaulting to 'today' when omitted."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter5_batch6.py",
+    "/app/frontend/src/components/Layout.jsx",
+    "/app/frontend/src/components/CoachChat.jsx"
+  ],
+  "success_rate": {"backend": "8/9 (1 skipped as endpoint doesn't exist) = 100% of applicable", "frontend": "100% of the 6 batch items after two z-index/centering fixes"},
+  "test_credentials": "baa/Nai130994 (PIN 130994), fikar/Jkt221112 (PIN 211122), alif/Jkt221112 (PIN 090926) — per /app/memory/test_credentials.md.",
+  "seed_data_creation": "None. Existing wipe (per /app/backend/wipe_tx.py) already applied.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run: python -m pytest backend/tests/test_iter5_batch6.py backend/tests/test_iter4_features.py backend/tests/test_iter3_features.py -o addopts='' -v. Two frontend files were edited (Layout.jsx notif dropdown centering; CoachChat.jsx overlay z-index). If main agent wants a cleaner approach, remove fade-up from notif-list or rework fade-up @keyframes so it only animates opacity.",
+  "rca of the issue": "Notification dropdown was previously reported to shift the page on mobile. E1's fix applied `-translate-x-1/2` for centering but the same element carries the `fade-up` utility class whose @keyframes ends with `transform: none` and `animation-fill-mode: both`, which forcibly clears the tailwind translate at the end of the 0.5s animation. Result: box.x = 50% viewport (195px on 390-wide), then bento contents extending 358px right, going off-screen and causing perceived shift. Verified pre-fix: notif-list x=195, w=358.8, center=374 (bad). Post-fix (mx-auto): x=15.6, center=195 (correct)."
+}

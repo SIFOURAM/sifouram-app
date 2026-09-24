@@ -31,7 +31,7 @@ export default function CoachChat() {
         </span>
       </button>
       {open && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4" onClick={() => setOpen(false)}>
+        <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4" onClick={() => setOpen(false)}>
           <div onClick={(e) => e.stopPropagation()} data-testid="coach-panel" className="bento gold w-full sm:max-w-md h-[85vh] sm:h-[600px] flex flex-col p-0 overflow-hidden rounded-b-none sm:rounded-3xl">
             <div className="flex items-center justify-between p-4 border-b border-border/60"><div><p className="font-heading font-bold">Coach SI FOUR AM 🤖☕</p><p className="text-[11px] text-muted-foreground">Tanya apa saja — dimaksimalkan untuk jualan ☕</p></div><button data-testid="coach-close" onClick={() => setOpen(false)} className="p-2 rounded-lg hover:bg-muted"><X className="w-4 h-4" /></button></div>
             {pois.length > 0 && <div className="flex gap-1 overflow-x-auto px-3 py-2 border-b border-border/40">{pois.slice(0, 8).map((p, i) => <a key={i} href={`https://www.google.com/maps?q=${p.lat},${p.lng}`} target="_blank" rel="noreferrer" className="shrink-0 text-[10px] rounded-full bg-muted px-2 py-1 flex items-center gap-1"><MapPin className="w-3 h-3 text-primary" />{p.name}</a>)}</div>}

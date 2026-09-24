@@ -53,6 +53,14 @@ Advanced coffee-cart business OS (POS, inventory w/ recipes, menu stock, rider s
 - Withdrawal disbursement status: create_withdrawal sets status='pending'; new POST /api/withdrawals/{wid}/accept (superadmin, idempotent) → status='diterima' + accepted_by/accepted_at. Salary/Gaji page shows per-rider "Pencairan Gaji / Insentif" list with 'Diterima' button (superadmin only) → flips to 'Diterima ✓'; rider sees 'Pending' badge only.
 - Profile: riders can save up to 3 bank accounts (banks[] each {bank_name, bank_account, bank_holder}); UI add/remove rows (cap 3), server also caps to 3. WithdrawDialog lets rider pick target bank (withdraw-bank). Legacy single-bank fields auto-migrated into banks[] on read.
 
+## Revision 5 (2026-06) — batch of 6 UX + data changes (tested: iteration_5.json, 100%)
+- No horizontal shift on any device: html/body/#root overflow-x hidden; NotifBell dropdown re-centered with `left-0 right-0 mx-auto` (fade-up's transform:none was cancelling -translate-x-1/2).
+- Orientation lock: full-screen `.rotate-lock` overlay (App.js, data-testid rotate-lock) shows in landscape ≤900px, forcing portrait use.
+- Tanya AI (Kasir): manual input answers ANY question (broadened backend prompt); coach overlay z-[60] so it clears bottom nav on mobile.
+- Bottom nav shrunk ~25% (icons 15px, labels 8px).
+- All page/tab TITLE texts removed — PageHeader now renders only action children (no eyebrow/h1).
+- One-time data wipe (backend/wipe_tx.py): emptied sales, deposits, rider_stock, eod, handovers, expenses, invoices, customers, inventory_tx, menu_stock_tx, notifications; reset materials.stock & menus.stock to 0 (item/menu definitions kept).
+
 ## Backlog / P1-P2
 - Google Drive photo storage (needs OAuth credentials) · Google Maps (needs API key)
 - V2: AI demand forecasting, Bluetooth thermal printing, WA auto-broadcast marketing
