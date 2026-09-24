@@ -1012,6 +1012,9 @@ async def save_deposit(body: DepositIn, u=Depends(STAFF)):
            "expenses": body.expenses, "expense_note": body.expense_note, "net_cash": net_cash, "motivation": motiv, "updated_at": now_iso()}
     await db.deposits.update_one({"rider_id": body.rider_id, "date": body.date}, {"$set": doc}, upsert=True)
     await gs_sync("deposits", {**doc, "rows": "; ".join(f"{r['name']}: stock {r['stock']} sisa {r['remaining']} cash {r['cash']} qris {r['qris']} waste {r['wastage']}" for r in rows), "bundles": str(bundles_out)})
+    await db.notifications.insert_one({"id": uid(), "for_role": "superadmin", "type": "deposit", "title": f"Setoran · {rider['name']}",
+                                       "body": f"{cups} cups · Cash Rp {int(cash):,} · QRIS Rp {int(qris):,} · Net Rp {int(net_cash):,}".replace(",", "."),
+                                       "ref_id": doc["id"], "read": False, "created_at": now_iso()})
     return doc
 
 
@@ -1172,6 +1175,12 @@ async def read_notifications(u=Depends(SUPER)):
     return {"ok": True}
 
 
+@api.post("/notifications/clear")
+async def clear_notifications(u=Depends(SUPER)):
+    await db.notifications.delete_many({"for_role": "superadmin"})
+    return {"ok": True}
+
+
 # ---------- AI Sales Coach ----------
 class CoachIn(BaseModel):
     message: str
@@ -1224,16 +1233,32 @@ async def coach_chat(body: CoachIn, u=Depends(ANY)):
     poi_txt = "\n".join(f"- {p['name']} ({p['type']})" for p in pois) or ("(daftar POI tidak tersedia — gunakan pengetahuan umum tentang area " + (area or "sekitar rider") + ": sekolah, pasar, kantor, stasiun, masjid, taman, kos-kosan)")
     hist = await db.coach_chats.find({"user_id": u["id"]}, NOID).sort("created_at", -1).limit(6).to_list(6)
     hist_txt = "\n".join(f"Rider: {h['message']}\nCoach: {h['reply'][:300]}" for h in reversed(hist))
-    system = ("Kamu adalah 'Coach SI FOUR AM', pelatih penjualan kopi gerobak keliling (Rp5.000–12.000/cup) yang hangat, energik, dan sangat praktis. "
-              "Jawab dalam Bahasa Indonesia santai-semangat, padat (maks ±180 kata), pakai bullet & emoji secukupnya. Selalu berikan: (1) 2–3 lokasi ramai TERDEKAT dari daftar POI dengan alasan & jam terbaik, "
-              "(2) 1 taktik jualan konkret (sapaan, promo bundling 4 cup Rp45.000 / 10 cup Rp110.000, upsell), (3) kalimat penyemangat menuju target 50 cup (kategori: ≤30 Semangat, 31–49 Hampir, ≥50 Tembus). "
-              f"\nKONTEKS: waktu {datetime.now(WIB).strftime('%A %H:%M')} WIB. Lokasi rider: {area or 'tidak diketahui'}. Rider {u['name']}. Terjual hari ini {sold} cup (target 50). Sisa stok: {remaining}.\nPOI radius 1,5 km:\n{poi_txt}\n\nRiwayat:\n{hist_txt}")
+    system = ("Kamu adalah 'Coach SI FOUR AM', asisten AI yang hangat, cerdas, dan energik untuk tim kopi gerobak keliling (Rp5.000–12.000/cup). "
+              "Jawab pertanyaan APAPUN dari pengguna dalam Bahasa Indonesia yang santai, ramah, dan membantu — entah soal jualan, motivasi, ide konten, cuaca, pengetahuan umum, atau obrolan biasa. "
+              "Jawab padat (maks ±180 kata), pakai bullet & emoji secukupnya. Jika pertanyaan menyangkut jualan atau lokasi, WAJIB sertakan 2–3 lokasi ramai TERDEKAT dari daftar POI dengan alasan & jam terbaik, plus 1 taktik jualan konkret (sapaan, bundling 4 cup Rp45.000 / 10 cup Rp110.000, upsell). "
+              "Untuk pertanyaan lain, jawab langsung & akurat, lalu bila relevan kaitkan dengan cara menambah penjualan kopi. Selalu tutup dengan 1 kalimat penyemangat. "
+              f"\nKONTEKS: waktu {datetime.now(WIB).strftime('%A %H:%M')} WIB. Lokasi rider: {area or 'tidak diketahui'}. User: {u['name']} ({u['role']}). Terjual hari ini {sold} cup (target 50). Sisa stok: {remaining}.\nPOI radius 1,5 km:\n{poi_txt}\n\nRiwayat:\n{hist_txt}")
     chat = LlmChat(api_key=os.environ["EMERGENT_LLM_KEY"], session_id=f"coach-{u['id']}", system_message=system).with_model("openai", "gpt-5.4-mini")
     reply = await chat.send_message(UserMessage(text=body.message))
     doc = {"id": uid(), "user_id": u["id"], "message": body.message, "reply": reply, "pois": pois, "area": area, "sold": sold, "created_at": now_iso()}
     await db.coach_chats.insert_one(doc)
     doc.pop("_id", None)
     return doc
+
+
+class PromoIn(BaseModel):
+    theme: Optional[str] = None
+
+
+@api.post("/promo/idea")
+async def promo_idea(body: PromoIn, u=Depends(SUPER)):
+    from emergentintegrations.llm.chat import LlmChat, UserMessage
+    system = ("Kamu copywriter promosi WhatsApp untuk 'SI FOUR AM', kopi gerobak keliling (Rp5.000–12.000/cup, ada bundling 4 cup Rp45.000 & 10 cup Rp110.000). "
+              "Buat 1 pesan promo WhatsApp Bahasa Indonesia yang singkat (maks 60 kata), hangat, persuasif, pakai emoji secukupnya, sebut nama toko SI FOUR AM, ada ajakan beli & sebut bundling. "
+              "Boleh pakai token {nama} sebagai sapaan nama pelanggan. Jangan pakai placeholder kurung siku lain. Balas HANYA teks pesannya saja.")
+    chat = LlmChat(api_key=os.environ["EMERGENT_LLM_KEY"], session_id=f"promo-{u['id']}", system_message=system).with_model("openai", "gpt-5.4-mini")
+    text = await chat.send_message(UserMessage(text=(body.theme or "promo menarik hari ini untuk menarik pelanggan")))
+    return {"text": text}
 
 
 # ---------- Aggregations ----------

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Minus, Plus, Trash2, LogIn, LogOut, ReceiptText, History, Lock } from "lucide-react";
+import { Minus, Plus, Trash2, LogIn, LogOut, ReceiptText, History, Lock, CalendarCheck } from "lucide-react";
 import { api, errMsg } from "../lib/api";
 import { fmtRp, today, fmtTime, waNumber } from "../lib/helpers";
 import { useT } from "../lib/i18n";
@@ -104,6 +104,7 @@ export default function POS() {
   const [hist, setHist] = useState(null);
   const [histDate, setHistDate] = useState(today());
   const [busy, setBusy] = useState(false);
+  const [showAbsen, setShowAbsen] = useState(false);
   const [clientId, setClientId] = useState(crypto.randomUUID());
 
   useEffect(() => { if (!isRider) api.get("/users", { params: { role: "rider" } }).then((r) => setRiders(r.data)); }, [isRider]);
@@ -158,12 +159,17 @@ export default function POS() {
   return (
     <div data-testid="pos-page">
       <PageHeader eyebrow="Point of Sale" title={t("pos")}>
-        <button data-testid="eod-button" onClick={openEod} disabled={!riderId} className="btn-ghost h-10"><ReceiptText className="w-4 h-4" />{t("endDay")}</button>
-        <button data-testid="history-button" onClick={openHist} disabled={!riderId} className="btn-ghost h-10"><History className="w-4 h-4" />{t("history")}</button>
+        <div className="flex flex-col items-stretch sm:items-end gap-2 w-full sm:w-auto">
+          <button data-testid="absen-button" onClick={() => setShowAbsen(true)} className="btn-primary h-10"><CalendarCheck className="w-4 h-4" />{L ? "Absen" : "Attendance"}</button>
+          <div className="flex gap-2">
+            <button data-testid="eod-button" onClick={openEod} disabled={!riderId} className="btn-ghost h-9 text-xs flex-1"><ReceiptText className="w-4 h-4" />{t("endDay")}</button>
+            <button data-testid="history-button" onClick={openHist} disabled={!riderId} className="btn-ghost h-9 text-xs flex-1"><History className="w-4 h-4" />{t("history")}</button>
+          </div>
+        </div>
       </PageHeader>
-      <div className="grid lg:grid-cols-3 gap-6">
-        <Attendance rider={rider} riders={riders} riderId={riderId} setRiderId={setRiderId} isRider={isRider} />
-        <div className="lg:col-span-2 space-y-6">
+      <div className="grid gap-6">
+        {!isRider && !riderId && <div className="rounded-2xl border border-primary/40 bg-primary/10 p-4 text-sm text-primary flex gap-2" data-testid="pick-rider-hint"><CalendarCheck className="w-4 h-4 shrink-0" />{L ? "Klik tombol Absen di kanan atas untuk memilih rider & melakukan absensi." : "Click Attendance (top right) to select a rider."}</div>}
+        <div className="space-y-6">
           {riderId && !stock.has_stock && <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-500 flex gap-2" data-testid="no-stock-warning"><Lock className="w-4 h-4 shrink-0" />{t("noStock")}</div>}
           {riderId && stock.has_stock && (stock.closed || stock.deposited) && <div className="rounded-2xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-500 flex gap-2" data-testid="pos-locked"><Lock className="w-4 h-4 shrink-0" />{stock.deposited ? t("depositDone") : t("eodDone")}</div>}
           {riderId && stock.has_stock && <>
@@ -255,6 +261,12 @@ export default function POS() {
           </div>
         </div>)}
       {(user.role === "rider" || user.role === "superadmin") && <CoachChat />}
+
+      <Dialog open={showAbsen} onOpenChange={(o) => !o && setShowAbsen(false)}>
+        <DialogContent data-testid="absen-dialog"><DialogHeader><DialogTitle>{L ? "Absen Kehadiran" : "Attendance"}</DialogTitle></DialogHeader>
+          <Attendance rider={rider} riders={riders} riderId={riderId} setRiderId={setRiderId} isRider={isRider} />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

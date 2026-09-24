@@ -13,10 +13,22 @@ function NotifBell() {
   const load = () => api.get("/notifications").then((r) => setList(r.data)).catch(() => {});
   useEffect(() => { load(); const id = setInterval(load, 30000); return () => clearInterval(id); }, []);
   const unread = list.filter((n) => !n.read).length;
+  const clearAll = () => api.post("/notifications/clear").then(() => { setList([]); setOpen(false); }).catch(() => {});
   return (
     <div className="relative">
       <button data-testid="notif-bell" onClick={() => { setOpen(!open); if (unread) api.post("/notifications/read").then(load); }} className="p-2 rounded-lg hover:bg-muted relative"><Bell className="w-4 h-4" />{unread > 0 && <span data-testid="notif-count" className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">{unread}</span>}</button>
-      {open && <div data-testid="notif-list" className="absolute right-0 top-11 w-72 max-h-80 overflow-y-auto bento gold p-2 z-50 fade-up">{list.map((n) => <div key={n.id} className={`p-2 rounded-lg text-xs ${n.read ? "" : "bg-primary/10"}`}><p className="font-semibold">{n.title}</p><p className="text-muted-foreground">{n.body}</p></div>)}{!list.length && <p className="text-xs text-muted-foreground p-3 text-center">—</p>}</div>}
+      {open && <>
+        <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+        <div data-testid="notif-list" className="fixed left-1/2 -translate-x-1/2 top-20 w-[92vw] max-w-sm max-h-[70vh] overflow-y-auto bento gold p-3 z-50 fade-up">
+          <div className="flex items-center justify-between mb-2">
+            <p className="font-heading font-bold text-sm">Notifikasi</p>
+            {list.length > 0 && <button data-testid="notif-clear-all" onClick={clearAll} className="text-[11px] font-bold text-primary hover:underline">Semua Terbaca</button>}
+          </div>
+          <div className="space-y-1.5">
+            {list.map((n) => <div key={n.id} className={`p-2 rounded-lg text-xs ${n.read ? "bg-muted/40" : "bg-primary/10"}`}><p className="font-semibold">{n.title}</p><p className="text-muted-foreground">{n.body}</p></div>)}
+            {!list.length && <p className="text-xs text-muted-foreground p-4 text-center">Tidak ada notifikasi</p>}
+          </div>
+        </div></>}
     </div>
   );
 }
@@ -71,7 +83,7 @@ export default function Layout() {
     <div className="min-h-screen flex">
       <aside className="hidden lg:flex flex-col w-64 xl:w-72 border-r border-border/70 p-6 sticky top-0 h-screen overflow-y-auto" data-testid="sidebar">
         <div className="flex items-center gap-3 mb-8">
-          <div className="w-10 h-10 rounded-2xl bg-primary text-white flex items-center justify-center font-black font-heading">S4</div>
+          <div className="w-10 h-10 rounded-2xl overflow-hidden bg-primary/10 flex items-center justify-center"><img src="/logo.png" alt="SI FOUR AM" className="w-full h-full object-contain" /></div>
           <div><p className="font-heading font-bold leading-tight">SI FOUR AM</p><p className="eyebrow">{roleLabel}</p></div>
         </div>
         <nav className="flex flex-col gap-1 flex-1">
@@ -84,7 +96,7 @@ export default function Layout() {
 
       <div className="flex-1 min-w-0 flex flex-col">
         <header className="flex items-center justify-between px-4 lg:px-8 h-16 border-b border-border/70 sticky top-0 bg-background/80 backdrop-blur-xl z-40" data-testid="top-header">
-          <div className="flex items-center gap-2 lg:hidden"><div className="w-8 h-8 rounded-xl bg-primary text-white flex items-center justify-center font-black text-sm font-heading">S4</div><span className="font-heading font-bold">SI FOUR AM</span></div>
+          <div className="flex items-center gap-2 lg:hidden"><img src="/logo.png" alt="SI FOUR AM" className="w-8 h-8 rounded-xl object-contain" /><span className="font-heading font-bold">SI FOUR AM</span></div>
           <div className="hidden lg:block"><p className="eyebrow">{roleLabel}</p></div>
           <div className="flex items-center gap-2">
             {user.role === "superadmin" && <NotifBell />}

@@ -16,7 +16,11 @@ export default function Dashboard() {
   const [gps, setGps] = useState([]);
   const [showMap, setShowMap] = useState(false);
 
-  useEffect(() => { if (range) api.get("/dashboard/summary", { params: range }).then((r) => setD(r.data)); }, [range]);
+  useEffect(() => {
+    if (!range) return;
+    const load = () => api.get("/dashboard/summary", { params: range }).then((r) => setD(r.data)).catch(() => {});
+    load(); const id = setInterval(load, 15000); return () => clearInterval(id);
+  }, [range]);
   useEffect(() => {
     const load = () => api.get("/gps/active", { params: { date: today() } }).then((r) => setGps(r.data)).catch(() => {});
     load(); const id = setInterval(load, 20000); return () => clearInterval(id);
@@ -58,12 +62,12 @@ export default function Dashboard() {
           </Bento>
 
           <Bento className="col-span-2 fade-up" testId="rider-table">
-            <div className="flex items-center justify-between mb-4"><p className="eyebrow">Riders</p><span className="text-xs text-muted-foreground">click a rider for live GPS</span></div>
-            <table className="table-x"><thead><tr><th>Rider</th><th>Cups</th><th>Cash</th><th>QRIS</th></tr></thead>
+            <div className="flex items-center justify-between mb-4"><p className="eyebrow">Riders</p><span className="text-xs text-muted-foreground flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />realtime · click for GPS</span></div>
+            <table className="table-x"><thead><tr><th>Rider</th><th>Cups</th><th>Cash</th><th>QRIS</th><th>Total</th></tr></thead>
               <tbody>{d.by_rider.map((r) => (
                 <tr key={r.rider_id} data-testid={`rider-row-${r.rider_id}`} onClick={() => setShowMap(true)} className="cursor-pointer hover:bg-muted/50 transition-colors">
-                  <td className="font-semibold">{r.rider_name}</td><td className="num">{r.cups}</td><td className="num">{fmtRp(r.cash)}</td><td className="num">{fmtRp(r.qris)}</td></tr>))}
-                {!d.by_rider.length && <tr><td colSpan={4}><Empty text={t("noData")} /></td></tr>}
+                  <td className="font-semibold">{r.rider_name}</td><td className="num">{r.cups}</td><td className="num">{fmtRp(r.cash)}</td><td className="num">{fmtRp(r.qris)}</td><td data-testid={`rider-total-${r.rider_id}`} className="num font-bold text-primary">{fmtRp(r.cash + r.qris)}</td></tr>))}
+                {!d.by_rider.length && <tr><td colSpan={5}><Empty text={t("noData")} /></td></tr>}
               </tbody></table>
           </Bento>
           <Bento gold className="col-span-2 fade-up" testId="gps-panel">

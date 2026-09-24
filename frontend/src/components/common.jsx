@@ -105,7 +105,7 @@ export function ReceiptModal({ open, onClose, title, waText, waPhone, filename =
           <button onClick={onClose} data-testid="receipt-close" className="absolute -top-3 -right-3 z-10 w-8 h-8 rounded-full bg-card border border-border flex items-center justify-center"><X className="w-4 h-4" /></button>
           <div ref={ref} className="rounded-3xl bg-white text-black p-6 gold" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
             <div className="text-center mb-4">
-              <div className="mx-auto w-12 h-12 rounded-2xl bg-[#FF6B00] text-white flex items-center justify-center font-black text-lg" style={{ fontFamily: "Outfit" }}>S4</div>
+              <img src="/logo.png" alt="SI FOUR AM" className="mx-auto w-14 h-14 object-contain" />
               <p className="font-black text-lg mt-2 tracking-tight" style={{ fontFamily: "Outfit" }}>SI FOUR AM</p>
               <p className="text-[11px] uppercase tracking-widest text-gray-500">{title}</p>
             </div>

@@ -24,7 +24,7 @@ export default function Login() {
       <div className="hidden lg:flex relative overflow-hidden bg-black text-white p-14 flex-col justify-between">
         <img src="https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=1400&q=80" alt="" className="absolute inset-0 w-full h-full object-cover opacity-40" />
         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
-        <div className="relative flex items-center gap-3"><div className="w-11 h-11 rounded-2xl bg-primary flex items-center justify-center font-black font-heading">S4</div><span className="font-heading font-bold text-lg">SI FOUR AM</span></div>
+        <div className="relative flex items-center gap-3"><img src="/logo.png" alt="SI FOUR AM" className="w-11 h-11 rounded-2xl object-contain" /><span className="font-heading font-bold text-lg">SI FOUR AM</span></div>
         <div className="relative">
           <p className="eyebrow text-primary mb-4">Coffee Cart Operating System</p>
           <h1 className="text-5xl xl:text-6xl font-bold tracking-tight leading-[1.05]">Every cup,<br />every rider,<br /><span className="text-primary">every rupiah.</span></h1>
@@ -35,7 +35,7 @@ export default function Login() {
       <div className="flex items-center justify-center p-6 sm:p-12">
         <form onSubmit={submit} className="w-full max-w-sm fade-up">
           <div className="flex justify-between items-center mb-10">
-            <div className="lg:hidden flex items-center gap-2"><div className="w-9 h-9 rounded-xl bg-primary text-white flex items-center justify-center font-black font-heading">S4</div><span className="font-heading font-bold">SI FOUR AM</span></div>
+            <div className="lg:hidden flex items-center gap-2"><img src="/logo.png" alt="SI FOUR AM" className="w-9 h-9 rounded-xl object-contain" /><span className="font-heading font-bold">SI FOUR AM</span></div>
             <button type="button" data-testid="login-lang-toggle" onClick={() => setLang(lang === "en" ? "id" : "en")} className="ml-auto text-xs font-semibold px-3 h-8 rounded-full border border-border">{lang === "en" ? "EN → ID" : "ID → EN"}</button>
           </div>
           <Coffee className="w-8 h-8 text-primary mb-4" />
