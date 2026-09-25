@@ -6,7 +6,7 @@ import autoTable from "jspdf-autotable";
 import { api, errMsg } from "../lib/api";
 import { fmtRp, today, openWA, fmtDate, nowTime } from "../lib/helpers";
 import { useT } from "../lib/i18n";
-import { PageHeader, Bento, Field, Select } from "../components/common";
+import { PageHeader, Bento, Field, Select, PhotoCapture } from "../components/common";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 
 const packs = (m) => (m.stock / m.pack_qty).toFixed(2);
@@ -19,6 +19,16 @@ export default function Inventory() {
   const [tab, setTab] = useState("stock");
   const [form, setForm] = useState({ material_id: "", type: "in", qty: "", note: "", date: today(), item_name: "", supplier: "" });
   const [newMat, setNewMat] = useState(null);
+  const [wf, setWf] = useState({ menu_id: "", qty: "", note: "", photo: "" });
+  const submitWastage = async () => {
+    try {
+      const { data } = await api.post("/inventory/wastage", { menu_id: wf.menu_id, qty: Number(wf.qty), photo: wf.photo, note: wf.note });
+      const back = process.env.REACT_APP_BACKEND_URL || "";
+      const url = data.photo_url?.startsWith("http") ? data.photo_url : back + data.photo_url;
+      openWA(`*SI FOUR AM — WASTAGE MENU*\n📅 ${data.date} ${data.time}\n----------------------------------\n☕ ${data.menu_name}: -${data.qty} cup\nStok: ${data.before} → ${data.after}\n📝 ${data.note || "-"}\n👤 ${data.user}\n📷 Foto: ${url}`);
+      toast.success("Wastage dicatat ✓"); setWf({ menu_id: "", qty: "", note: "", photo: "" }); load();
+    } catch (e) { toast.error(errMsg(e)); }
+  };
 
   const load = () => Promise.all([api.get("/materials"), api.get("/menus"), api.get("/inventory/tx")]).then(([a, b, c]) => { setMats(a.data); setMenus(b.data); setTx(c.data); });
   useEffect(() => { load(); }, []);
@@ -58,7 +68,7 @@ export default function Inventory() {
         <button data-testid="wa-order-button" onClick={() => { pdf("Order Items", ["Material", "Current stock", "Order qty", "Pack price", "Total"], orderRows()); openWA(orderText()); }} className="btn-wa h-10"><FileDown className="w-4 h-4" />{t("orderItems")}</button>
       </PageHeader>
 
-      <div className="flex gap-2 mb-6">{["stock", "recipes", "history"].map((k) => <button key={k} data-testid={`inv-tab-${k}`} onClick={() => setTab(k)} className={`h-9 px-4 rounded-full text-xs font-semibold capitalize ${tab === k ? "bg-primary text-white" : "bg-muted"}`}>{k}</button>)}</div>
+      <div className="flex gap-2 mb-6">{["stock", "recipes", "wastage", "history"].map((k) => <button key={k} data-testid={`inv-tab-${k}`} onClick={() => setTab(k)} className={`h-9 px-4 rounded-full text-xs font-semibold capitalize ${tab === k ? "bg-primary text-white" : "bg-muted"}`}>{k}</button>)}</div>
 
       {tab === "stock" && (
         <div className="grid lg:grid-cols-3 gap-6">
@@ -100,6 +110,21 @@ export default function Inventory() {
               <ul className="text-xs space-y-1">{m.recipe.map((r, i) => <li key={i} className="flex justify-between"><span>{r.name}</span><span className="num text-muted-foreground">{r.qty} {r.unit}</span></li>)}
                 <li className="flex justify-between text-muted-foreground pt-1 border-t border-border/50"><span>{m.recipe.length} {t("items")} incl. packaging</span></li></ul>
             </Bento>))}
+        </div>
+      )}
+
+      {tab === "wastage" && (
+        <div className="grid lg:grid-cols-2 gap-6">
+          <Bento gold className="fade-up" testId="wastage-form">
+            <p className="eyebrow mb-4">Wastage Menu (Center Produksi)</p>
+            <div className="space-y-3">
+              <Field label="Menu"><Select testId="wastage-menu-select" value={wf.menu_id} onChange={(v) => setWf({ ...wf, menu_id: v })} placeholder="Pilih menu" options={menus.map((m) => ({ value: m.id, label: `${m.name} (stok ${m.stock || 0})` }))} /></Field>
+              <Field label="Qty (cup)"><input data-testid="wastage-qty-input" type="number" className="field" value={wf.qty} onChange={(e) => setWf({ ...wf, qty: e.target.value })} /></Field>
+              <Field label={t("note")}><input data-testid="wastage-note-input" className="field" value={wf.note} onChange={(e) => setWf({ ...wf, note: e.target.value })} /></Field>
+              <div><p className="eyebrow mb-2">Foto bukti (wajib)</p><PhotoCapture testId="wastage-photo" value={wf.photo} onChange={(p) => setWf({ ...wf, photo: p })} /></div>
+              <button data-testid="wastage-submit" onClick={submitWastage} disabled={!wf.menu_id || !wf.qty || !wf.photo} className="btn-primary w-full">Catat & Kirim WhatsApp</button>
+            </div>
+          </Bento>
         </div>
       )}
 

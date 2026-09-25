@@ -24,7 +24,7 @@ const en = {
   period: "Period", details: "Details", close: "Close", resend: "Resend", closed: "Sales closed", eodDone: "Today's sales have been closed", depositDone: "Deposit already entered — POS locked",
   noStock: "No initial stock set for today. Ask Bar Team / Superadmin to save Rider Stock first.", thankYou: "Thank you!", items: "Items", transactions: "transactions",
   estProfit: "Est. Profit", revenue: "Revenue", customers: "Customers", tapProducts: "Tap products to add them", selectMenus: "Select menus", appsScript: "Google Apps Script URL",
-  permissions: "Permissions", appearance: "Appearance & language", motivation: "Keep up the sales!",
+  permissions: "Permissions", appearance: "Appearance & language", motivation: "Keep up the sales!", userInfo: "User Info",
   textFont: "Text & Font", textSize: "Text Size", boldText: "Bold Text", textColor: "Text Color", fontType: "Font Type", defaultFont: "Default",
 };
 const id = {
@@ -51,7 +51,7 @@ const id = {
   period: "Periode", details: "Detail", close: "Tutup", resend: "Kirim Ulang", closed: "Penjualan ditutup", eodDone: "Penjualan hari ini sudah ditutup", depositDone: "Setoran sudah diinput — POS terkunci",
   noStock: "Belum ada stok awal hari ini. Minta Bar Team / Superadmin menyimpan Stok Rider dulu.", thankYou: "Terima kasih!", items: "Item", transactions: "transaksi",
   estProfit: "Est. Laba", revenue: "Pendapatan", customers: "Pelanggan", tapProducts: "Ketuk produk untuk menambahkan", selectMenus: "Pilih menu", appsScript: "URL Google Apps Script",
-  permissions: "Hak Akses", appearance: "Tampilan & bahasa", motivation: "Semangat jualannya!",
+  permissions: "Hak Akses", appearance: "Tampilan & bahasa", motivation: "Semangat jualannya!", userInfo: "Info Pengguna",
   textFont: "Teks & Font", textSize: "Ukuran Teks", boldText: "Teks Tebal", textColor: "Warna Teks", fontType: "Jenis Font", defaultFont: "Bawaan",
 };
 const ja = {

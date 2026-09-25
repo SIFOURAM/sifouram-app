@@ -104,7 +104,8 @@
 [data-debug-wrapper="true"] { display: contents !important; }
 
 /* Prevent any horizontal shift / side scroll on all devices */
-html, body, #root { max-width: 100%; overflow-x: hidden; overscroll-behavior-x: none; }
+html, body { max-width: 100%; overflow-x: hidden; overscroll-behavior-x: none; }
+#root { max-width: 100%; overflow-x: clip; }
 
 /* Orientation lock: block landscape usage on phones/tablets */
 .rotate-lock {

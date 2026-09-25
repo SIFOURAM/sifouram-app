@@ -62,7 +62,7 @@ const item = (to, key) => ({ to, key, icon: I[key] });
 // Bottom nav (mobile) + "More" sub-tabs. Desktop sidebar shows main + more flat.
 export const NAV = {
   superadmin: { main: [item("/", "dashboard"), item("/rider-stock", "riderStock"), item("/deposit", "deposit"), item("/handover", "handover")],
-    more: [item("/inventory", "inventory"), item("/menu-stock", "menuStock"), item("/pos", "pos"), item("/invoice", "invoice"), item("/rider-dashboard", "riderDash"), item("/finance", "finance"), item("/salary", "salary"), item("/customers", "customers"), item("/settings", "settings")] },
+    more: [item("/inventory", "inventory"), item("/menu-stock", "menuStock"), item("/pos", "pos"), item("/invoice", "invoice"), item("/rider-dashboard", "riderDash"), item("/finance", "finance"), item("/salary", "salary"), item("/customers", "customers"), item("/user-info", "userInfo"), item("/settings", "settings")] },
   barteam: { main: [item("/menu-stock", "menuStock"), item("/rider-stock", "riderStock"), item("/deposit", "deposit"), item("/inventory", "inventory"), item("/rider-dashboard", "riderDash"), item("/settings", "settings")], more: [] },
   rider: { main: [item("/pos", "pos"), item("/rider-dashboard", "riderDash"), item("/settings", "settings")], more: [] },
 };

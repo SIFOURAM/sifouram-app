@@ -1194,6 +1194,59 @@ async def update_user_photo(uid: str, body: PhotoIn, u=Depends(SUPER)):
     return {"photo": url}
 
 
+class UserUpdateIn(BaseModel):
+    name: Optional[str] = None
+    username: Optional[str] = None
+    email: Optional[str] = None
+    whatsapp: Optional[str] = None
+    banks: Optional[list] = None
+    password: Optional[str] = None
+    pin: Optional[str] = None
+
+
+@api.put("/users/{uid}")
+async def admin_update_user(uid: str, body: UserUpdateIn, u=Depends(SUPER)):
+    upd = {}
+    for k in ("name", "username", "email", "whatsapp", "banks"):
+        v = getattr(body, k)
+        if v is not None:
+            upd[k] = v.lower() if k == "email" else v
+    if body.password:
+        upd["password_hash"] = hash_pw(body.password)
+    if body.pin:
+        upd["pin_hash"] = hash_pw(body.pin)
+    if upd:
+        await db.users.update_one({"id": uid}, {"$set": upd})
+    return public_user(await db.users.find_one({"id": uid}))
+
+
+class WastageIn(BaseModel):
+    menu_id: str
+    qty: int
+    photo: str
+    note: str = ""
+
+
+@api.post("/inventory/wastage")
+async def inventory_wastage(body: WastageIn, u=Depends(ANY)):
+    if u["role"] == "rider":
+        raise HTTPException(403, "Forbidden")
+    if not body.photo:
+        raise HTTPException(400, "Photo required")
+    m = await db.menus.find_one({"id": body.menu_id})
+    if not m:
+        raise HTTPException(404, "Menu not found")
+    url = await store_photo(body.photo, "wastage", uid())
+    before = m.get("stock", 0)
+    after = before - body.qty
+    await db.menus.update_one({"id": body.menu_id}, {"$set": {"stock": after}})
+    doc = {"id": uid(), "menu_id": m["id"], "menu_name": m["name"], "type": "wastage", "qty": body.qty, "before": before, "after": after,
+           "photo_url": url, "note": body.note, "date": datetime.now(WIB).strftime("%Y-%m-%d"), "time": now_wib(), "user": u["name"], "created_at": now_iso()}
+    await db.menu_stock_tx.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
 # ---------- AI Sales Coach ----------
 class CoachIn(BaseModel):
     message: str

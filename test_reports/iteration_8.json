@@ -1,0 +1,36 @@
+{
+  "summary": "Iteration_8 batch of 3 changes tested. Backend: 4/4 pytest PASS — /api/coach/chat honors provider={gpt,claude,gemini} and doc.provider matches; /api/coach/history returns entries with all three providers. Frontend: (2/3) Display Mode buttons view-web/view-tablet/view-mobile work perfectly (max-width 430/834 + sidebar hidden + bottom-nav shown in mobile; persistence across reload verified). AI provider selector on POS coach panel works — all 3 options present, Claude & Gemini both return replies, localStorage 'si4am_ai_provider' persists, close+reopen restores history (21 bubbles) and provider selector remains 'gemini'. Orange bubble regression OK (rgb(255,106,0)). CRITICAL: HEADER-FIXED requirement is NOT satisfied — top-header has 'sticky top-0' class but actually scrolls off with content (bounding rect top=-243 when scrollY=243) because #root has `overflow-x:hidden` in index.css line 107, which makes #root the containing block for sticky and effectively breaks the sticky behavior. The -translate-y-full class has been removed (good, no console errors) but the header is still not visually pinned.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Layout header (top-header)", "issue": "Header is NOT actually sticky — scrolls off with content despite `sticky top-0`. Root cause: `html, body, #root { overflow-x: hidden }` (index.css line 107) creates an overflow context on #root that breaks the sticky positioning of the header (its containing block becomes #root which doesn't itself scroll, so header moves with content). Requirement 'header must STAY fixed' fails visually.", "selector": "[data-testid=top-header]", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter8_batch.py",
+    "/app/test_reports/pytest/iter8.xml"
+  ],
+  "action_items": [
+    "FIX HEADER STICKY: Either (a) remove `overflow-x: hidden` from #root in index.css (keep on html/body only) OR (b) change header from `sticky top-0` to `fixed top-0 left-0 right-0` with a compensating spacer. Option (a) is minimal; verify horizontal scroll doesn't regress in mobile view. Confirm with: window.scrollTo(0,1500); expect getBoundingClientRect().top of [data-testid=top-header] to equal 0.",
+    "No other action items — provider selector, history persistence, and display mode all work as specified."
+  ],
+  "critical_code_review_comments": [
+    "index.css line 107 `#root { overflow-x: hidden }` is the culprit for broken sticky. Recommendation: apply `overflow-x:hidden` on html/body only, not on #root.",
+    "Layout.jsx: hideHead code fully removed, no console reference errors — good.",
+    "appearance.js: `applyAppearance` correctly toggles vm-web/vm-tablet/vm-mobile body classes and dispatches 'appearancechange' — Layout re-renders sidebar/bottom-nav correctly.",
+    "CoachChat.jsx: provider select is persisted via localStorage; history loads on first open via useRef flag (loaded.current) — good pattern.",
+    "server.py CoachIn.provider defaults to 'gpt'; models mapping gpt->openai/gpt-5.4, claude->anthropic/claude-sonnet-4-6, gemini->gemini/gemini-3.1-pro-preview verified live."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter8_batch.py (new)"
+  ],
+  "success_rate": {"backend": "100% (4/4)", "frontend": "2/3 features fully pass (Display Mode PASS, AI Provider PASS, Header-Fixed FAIL)"},
+  "test_credentials": "superadmin baa/Nai130994 (PIN 130994) used successfully.",
+  "seed_data_creation": "Created 5 TEST_iter8 coach chat entries (2 claude + 2 gemini + 1 gpt from backend pytest) in db.coach_chats for user baa — main agent may leave or purge.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Header sticky bug: reproduce on /salary page — scroll window down; header data-testid=top-header should remain at viewport top (getBoundingClientRect().top === 0) but currently moves off-screen (top negative). Cause: #root overflow-x:hidden. Everything else in this batch is green.",
+  "rca of the issue": "position:sticky computes its containing block from the nearest ancestor with a scroll mechanism. When #root has `overflow-x: hidden`, browsers designate #root as a scroll container for the sticky element, but #root itself is not scrolled (document/body is). Result: header inside #root simply translates with the document flow instead of pinning to the viewport top. Fix by removing `overflow-x: hidden` from the #root rule (keep on html, body) or moving the sticky header outside of #root — recommended: change index.css line 107 to `html, body { max-width: 100%; overflow-x: hidden; overscroll-behavior-x: none; }` and drop #root from that selector, or set `#root { overflow-x: clip; }` in modern browsers which does not create a scroll container."
+}

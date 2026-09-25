@@ -9,6 +9,7 @@ import { PageHeader, Bento, Field } from "../components/common";
 export default function Profile() {
   const { t } = useT();
   const { user, setUser, logout } = useAuth();
+  const canEdit = user.role === "superadmin";
   const [f, setF] = useState({ name: user.name, whatsapp: user.whatsapp, email: user.email, joined_at: user.joined_at || "", placement: user.placement || "" });
   const BANKS = ["Bank BCA", "Bank Mandiri (Livin')", "Bank BRI (BRImo)", "Bank BNI (wondr)", "Bank BTN (Bale)", "CIMB Niaga (OCTO Mobile)", "Bank Danamon (D-Bank PRO)", "Bank Permata (PermataMobile X)", "OCBC Indonesia (OCBC mobile)", "Bank Syariah Indonesia (BYOND)", "Bank Jago", "Bank Neo Commerce (neobank)", "Allo Bank", "SeaBank", "blu by BCA Digital", "LINE Bank", "Jenius", "MotionBank", "Bank Raya", "Bank Saqu", "Superbank", "TMRW by UOB"];
   const [banks, setBanks] = useState(user.banks?.length ? user.banks : (user.bank_name ? [{ bank_name: user.bank_name, bank_account: user.bank_account || "", bank_holder: user.bank_holder || "" }] : []));
@@ -28,7 +29,7 @@ export default function Profile() {
         <Bento gold className="fade-up text-center" testId="profile-card">
           <label className="relative inline-block cursor-pointer">
             <div className="w-28 h-28 rounded-full overflow-hidden bg-primary/15 text-primary text-3xl font-bold flex items-center justify-center mx-auto">{user.photo ? <img src={user.photo} alt="" className="w-full h-full object-cover" /> : initials(user.name)}</div>
-            <input data-testid="profile-photo-input" type="file" accept="image/*" className="hidden" onChange={photo} />
+            <input data-testid="profile-photo-input" type="file" accept="image/*" className="hidden" disabled={!canEdit} onChange={photo} />
             <span className="absolute bottom-0 right-0 text-[10px] bg-primary text-white rounded-full px-2 py-0.5">edit</span>
           </label>
           <p className="font-heading font-bold text-xl mt-4">{user.name}</p><p className="text-sm text-muted-foreground">@{user.username}</p>
@@ -61,7 +62,7 @@ export default function Profile() {
                   </div>
                 </div>))}
               {banks.length < 3 && <button type="button" data-testid="bank-add" onClick={() => setBanks([...banks, { bank_name: "", bank_account: "", bank_holder: "" }])} className="btn-ghost w-full h-9 text-xs">+ Tambah rekening</button>}</>}
-            <button data-testid="profile-save-button" className="btn-primary w-full">{t("save")}</button>
+            <button data-testid="profile-save-button" className="btn-primary w-full" disabled={!canEdit}>{canEdit ? t("save") : "Hanya Superadmin"}</button>
           </form>
         </Bento>
         <div className="space-y-6">
@@ -69,12 +70,12 @@ export default function Profile() {
             <form onSubmit={savePw} className="space-y-3">
               <input data-testid="pw-old-input" type="password" className="field" placeholder="Current password" value={pw.old_password} onChange={(e) => setPw({ ...pw, old_password: e.target.value })} required />
               <input data-testid="pw-new-input" type="password" className="field" placeholder="New password" value={pw.new_password} onChange={(e) => setPw({ ...pw, new_password: e.target.value })} required minLength={6} />
-              <button data-testid="pw-save-button" className="btn-ghost w-full">Change Password</button></form></Bento>
+              <button data-testid="pw-save-button" className="btn-ghost w-full" disabled={!canEdit}>Change Password</button></form></Bento>
           <Bento className="fade-up" testId="pin-form"><p className="eyebrow mb-4">Change PIN</p>
             <form onSubmit={savePin} className="space-y-3">
               <input data-testid="pin-pw-input" type="password" className="field" placeholder="Account password" value={pin.password} onChange={(e) => setPin({ ...pin, password: e.target.value })} required />
               <input data-testid="pin-new-input" type="password" inputMode="numeric" className="field" placeholder="New PIN (4–6 digits)" value={pin.new_pin} onChange={(e) => setPin({ ...pin, new_pin: e.target.value })} required minLength={4} maxLength={6} />
-              <button data-testid="pin-save-button" className="btn-ghost w-full">Change PIN</button></form></Bento>
+              <button data-testid="pin-save-button" className="btn-ghost w-full" disabled={!canEdit}>Change PIN</button></form></Bento>
         </div>
       </div>
     </div>
